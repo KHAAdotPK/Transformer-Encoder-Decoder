@@ -1,0 +1,43 @@
+<Project DefaultTargets="Build" ToolsVersion="16.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <ItemGroup>        
+        <ProjectConfiguration Include="Debug|Win32">
+            <Configuration>Debug</Configuration>
+            <Platform>Win32</Platform>
+        </ProjectConfiguration>
+        <ProjectConfiguration Include="Debug|x64">
+            <Configuration>Debug</Configuration>
+            <Platform>x64</Platform>
+        </ProjectConfiguration>      
+    </ItemGroup>
+    <Import Project="$(VCTargetsPath)\Microsoft.Cpp.default.props" />
+    <PropertyGroup>       
+        <OutputType>Exe</OutputType>              
+        <IncludePath>%INCLUDE%;libjpeg;</IncludePath>
+        <TargetName>encoder-decoder</TargetName>
+        <PlatformToolset>v143</PlatformToolset>
+    </PropertyGroup>
+    <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+    <ItemDefinitionGroup>
+        <ClCompile>
+            <PreprocessorDefinitions Condition="'$(CSVPreprocessorDefinitions)'=='yes'">CSV_EXAMPLE_APPLICATION;CSV_NOT_ALLOW_EMPTY_TOKENS;GRAMMAR_END_OF_TOKEN_MARKER=' ';GRAMMAR_END_OF_LINE_MARKER='\n'</PreprocessorDefinitions>
+        </ClCompile>                
+    </ItemDefinitionGroup>
+    <ItemGroup>                 
+        <ClCompile Include="src/main.cpp" />
+        <!-- <ClCompile Include="lib/corpus/corpus.cc" />        
+        <ClCompile Include="lib/sundry/cooked_read.cc" /> -->               
+    </ItemGroup>
+    <ItemGroup>         
+        <!-- <ClInclude Include="src/main.hh" />
+        <ClInclude Include="lib/corpus/corpus.hh" />
+        <ClInclude Include="lib/numcy/numcy.hh" />
+        <ClInclude Include="lib/sundry/cooked_read.hh" /> -->               
+    </ItemGroup>
+
+    <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Targets" />
+    
+    <Target Name="move" AfterTargets="AfterBuild" Condition="'$(ConfigurationType)'=='Application'">
+        <Move SourceFiles="$(Configuration)\$(TargetName).exe" DestinationFiles="$(TargetName).exe" />
+        <Message Text="Moved executable file." Importance="high" />
+    </Target>
+</Project>
