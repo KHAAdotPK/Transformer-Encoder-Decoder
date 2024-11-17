@@ -1,8 +1,10 @@
-**Visualizing A Neural Machine Translation Model (Mechanics of Seq2seq Models With Attention)** by, Jay Alammar X@JayAlammar.
+ Drawing from Jay Alammar’s **Visualizing A Neural Machine Translation Model (Mechanics of Seq2seq Models With Attention)**.
 ---
 
 - **"**The word, however, needs to be represented by a vector. To transform a word into a vector, we turn to the class of methods called “word embedding” algorithms.**"**
-    The sbove statement refers to the process of converting words into high-dimensional vectors using algorithms like Word2Vec. Word embeddings are a core element of natural language processing because they represent words in a way that captures semantic relationships and contextual similarity. For example, words like "sunshine," "kisses," "cheeks," and "birds" are each represented as a vector, a list of real numbers that encodes aspects of each word's meaning and relationships to other words.
+    
+    - The sbove statement refers to the process of converting words into high-dimensional vectors 
+      using algorithms like Word2Vec. Word embeddings are a core element of natural language processing because they represent words in a way that captures semantic relationships and contextual similarity. For example, words like "sunshine," "kisses," "cheeks," and "birds" are each represented as a vector, a list of real numbers that encodes aspects of each word's meaning and relationships to other words.
 
 ```
 sunshine -0.837496 -1.055320 1.098407 -0.875249 0.951608 -0.904695 2.015359 -0.769061 1.338858 0.967960 -0.858001 0.013812 -0.026567 1.422336 1.577360 2.043583 -1.098003 -0.968427 1.265099 0.584877 0.250852 0.062136 0.363300 1.104700 -0.353904 -1.276656 0.194506 -0.526952 -0.878275 -0.327096 -0.460842 -0.103160 -0.356279 0.167415 -2.428486 -0.570614 -0.768021 -0.166090 -0.006392 -1.441865 -0.007248 -0.517012 -0.634928 0.857430 -1.004510 -1.277651 0.081099 -0.759937 0.279635 0.040915
@@ -13,3 +15,20 @@ cheeks -0.909332 -0.460400 -0.079960 -0.089470 -0.693628 1.224485 0.874309 0.552
 
 birds -0.467162 -0.036999 -0.040974 0.019772 0.885775 0.527786 1.059645 1.215737 -0.587111 -0.251593 1.273645 0.139854 -0.948526 -0.732949 -0.197380 -0.882619 2.282855 -0.004618 -1.949643 -0.799179 -0.618504 -0.258405 0.879007 0.181021 0.936570 -1.048642 -0.138906 -0.544141 -0.359967 -1.284610 0.503619 0.693182 -1.666434 -0.480470 1.760978 -0.527589 -1.091076 -0.840732 -0.062099 -0.246962 -1.595210 0.522291 -0.419830 -1.111785 -0.497824 0.545630 -1.536440 0.622187 -0.168387 1.315373
 ```
+
+- **"**By design, a RNN takes two inputs at each time step: an input (in the case of the encoder, one word from the input sentence), and a hidden state.**"** 
+
+    - The hidden state represents the output of the hidden layer in an RNN at a specific time step. It encapsulates information from the input sequence up to that point and is passed along to subsequent time steps. Hence, RNNs process input sequences one step at a time, and at the final step, the hidden state is the result of sequential updates applied at each time step, **influenced by one word (or input unit) at a time from the input sequence and the hidden states from earlier steps**."
+
+    - In a sentence like "The cat sat on the...", the hidden state at the word "on" includes the cumulative **context vector** from "The cat sat on".
+
+- **"**The **context vector** turned out to be a bottleneck for these types of models.**"** 
+
+    - **The Word (or Token) as Context**.
+        These fixed-size embeddings can fail to capture the full complexity of a word's meaning, especially in context. For instance: The word "bank" in "river bank" vs. "financial bank" may be mapped to the same vector, leading to loss of contextual meaning.
+
+    - **Bottleneck from Hidden States**.
+        The **hidden state** in RNNs summarizes the entire sequence up to a given time step into a fixed-size vector. For long sequences, the **hidden state** struggles to retain information about early inputs, leading to problems like the vanishing gradient problem during training.
+
+      
+
