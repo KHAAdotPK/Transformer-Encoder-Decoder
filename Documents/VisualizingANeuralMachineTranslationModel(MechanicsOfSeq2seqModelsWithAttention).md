@@ -3,8 +3,7 @@
 
 - **"**The word, however, needs to be represented by a vector. To transform a word into a vector, we turn to the class of methods called “word embedding” algorithms.**"**
     
-    - The sbove statement refers to the process of converting words into high-dimensional vectors 
-      using algorithms like Word2Vec. Word embeddings are a core element of natural language processing because they represent words in a way that captures semantic relationships and contextual similarity. For example, words like "sunshine," "kisses," "cheeks," and "birds" are each represented as a vector, a list of real numbers that encodes aspects of each word's meaning and relationships to other words.
+    - The above statement refers to the process of converting words into high-dimensional        vectors using algorithms like Word2Vec. Word embeddings are a core element of natural language processing because they represent words in a way that captures semantic relationships and contextual similarity. For example, words like "sunshine," "kisses," "cheeks," and "birds" are each represented as a vector, a list of real numbers that encodes aspects of each word's meaning and relationships to other words.
 
 ```
 sunshine -0.837496 -1.055320 1.098407 -0.875249 0.951608 -0.904695 2.015359 -0.769061 1.338858 0.967960 -0.858001 0.013812 -0.026567 1.422336 1.577360 2.043583 -1.098003 -0.968427 1.265099 0.584877 0.250852 0.062136 0.363300 1.104700 -0.353904 -1.276656 0.194506 -0.526952 -0.878275 -0.327096 -0.460842 -0.103160 -0.356279 0.167415 -2.428486 -0.570614 -0.768021 -0.166090 -0.006392 -1.441865 -0.007248 -0.517012 -0.634928 0.857430 -1.004510 -1.277651 0.081099 -0.759937 0.279635 0.040915
