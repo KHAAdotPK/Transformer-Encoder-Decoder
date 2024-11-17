@@ -65,7 +65,7 @@
     @msbuild project.xml /p:CSVPreprocessorDefinitions=yes
  */
 
-/*#ifdef GRAMMAR_END_OF_TOKEN_MARKER
+#ifdef GRAMMAR_END_OF_TOKEN_MARKER
 #undef GRAMMAR_END_OF_TOKEN_MARKER
 #endif
 #define GRAMMAR_END_OF_TOKEN_MARKER ' '
@@ -73,7 +73,7 @@
 #ifdef GRAMMAR_END_OF_LINE_MARKER
 #undef GRAMMAR_END_OF_LINE_MARKER
 #endif
-#define GRAMMAR_END_OF_LINE_MARKER '\n'*/
+#define GRAMMAR_END_OF_LINE_MARKER '\n'
 
 #define COMMAND "h -h help --help ? /? (Displays help screen)\n\
 v -v version --version /v (Displays version number)\n\
