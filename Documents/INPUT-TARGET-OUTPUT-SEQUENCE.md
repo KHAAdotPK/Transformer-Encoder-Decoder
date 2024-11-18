@@ -45,15 +45,25 @@ __Key Components__:
     @icp, input csv parser
     @t, type
  */
-#define BUILD_INPUT_SEQUENCE_FOR_LINE_BATCH_SIZE(is, v, p, t) {\
-t* ptr = cc_tokenizer::allocator<t>().allocate(p.get_total_number_of_tokens());\
-for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < p.get_total_number_of_tokens(); i++)\
+#define BUILD_INPUT_SEQUENCE_FOR_LINE_BATCH_SIZE(is, v, icp, t) {\
+t *ptr = NULL;\
+try\
 {\
-    CORPUS_PTR ret = v(p.get_token_by_number(i + 1));\
-    ptr[i] = ret->index;\
+    ptr = cc_tokenizer::allocator<t>().allocate(icp.get_total_number_of_tokens());\
 }\
-\
-is = Collective<t>(ptr, {static_cast<cc_tokenizer::string_character_traits<char>::size_type>(p.get_total_number_of_tokens()), 1, NULL, NULL});\
+catch (std::bad_alloc& e)\
+{\
+    throw ala_exception(cc_tokenizer::String<char>("BUILD_INPUT_SEQUENCE_FOR_LINE_BATCH_SIZE() Error: ") + cc_tokenizer::String<char>(e.what()));\
+}\
+catch (std::length_error& e)\
+{\
+    throw ala_exception(cc_tokenizer::String<char>("BUILD_INPUT_SEQUENCE_FOR_LINE_BATCH_SIZE() Error: ") + cc_tokenizer::String<char>(e.what()));\
+}\
+for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < icp.get_total_number_of_tokens(); i++)\
+{\
+    ptr[i] = v(icp.get_token_by_number(i + 1));\
+}\
+is = Collective<t>{ptr, DIMENSIONS{static_cast<cc_tokenizer::string_character_traits<char>::size_type>(icp.get_total_number_of_tokens()), 1, NULL, NULL}};\
 }\
 ```
 2. Target Sequence Macro:
@@ -65,15 +75,30 @@ is = Collective<t>(ptr, {static_cast<cc_tokenizer::string_character_traits<char>
     @tcp, target csv parser
     @t, type
  */
-#define BUILD_TARGET_SEQUENCE_FOR_LINE_BATCH_SIZE(ts, v, p, t) {\
-t* ptr = reinterpret_cast<t*>(cc_tokenizer::allocator<char>().allocate((p.get_total_number_of_tokens())*sizeof(t)));\
-for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < p.get_total_number_of_tokens(); i++)\
+#define BUILD_TARGET_SEQUENCE_FOR_LINE_BATCH_SIZE(ts, v, tcp, t) {\
+t *ptr = NULL;\
+try\
 {\
-    CORPUS_PTR ret = v(p.get_token_by_number(i + 1));\
-    ptr[i] = ret->index;\
+    ptr = cc_tokenizer::allocator<t>().allocate(tcp.get_total_number_of_tokens());\
 }\
-\
-ts = Collective<t>(ptr, {static_cast<cc_tokenizer::string_character_traits<char>::size_type>(p.get_total_number_of_tokens()), 1, NULL, NULL});\
+catch (std::bad_alloc& e)\
+{\
+    throw ala_exception(cc_tokenizer::String<char>("BUILD_TARGET_SEQUENCE_FOR_LINE_BATCH_SIZE() Error: ") + cc_tokenizer::String<char>(e.what()));\
+}\
+catch (std::length_error& e)\
+{\
+    throw ala_exception(cc_tokenizer::String<char>("BUILD_TARGET_SEQUENCE_FOR_LINE_BATCH_SIZE() Error: ") + cc_tokenizer::String<char>(e.what()));\
+}\
+for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < tcp.get_total_number_of_tokens(); i++)\
+{\
+    ptr[i] = v(tcp.get_token_by_number(i + 1));\
+}\
+/* TODO: Eliminate the Need for Narrow Conversion */\
+/* The return type of 'get_total_number_of_tokens()' is 'cc_tokenizer::string_character_traits<char>::int_type', */\
+/* while 'DIMENSIONS::columns' is 'cc_tokenizer::string_character_traits<char>::size_type'. */\
+/* Converting a signed to unsigned is a narrow conversion; it's recommended to avoid such conversions. */\
+/* In future iterations, enhance code consistency by ensuring similar semantics share consistent data types.*/\
+ts = Collective<t>{ptr, DIMENSIONS{static_cast<cc_tokenizer::string_character_traits<char>::size_type>(tcp.get_total_number_of_tokens()), 1, NULL, NULL}};\
 }\
 ```
 3. Training Loop Macro:
