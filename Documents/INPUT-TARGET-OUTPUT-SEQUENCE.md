@@ -63,6 +63,11 @@ for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < icp.get_t
 {\
     ptr[i] = v(icp.get_token_by_number(i + 1));\
 }\
+/* TODO: Eliminate the Need for Narrow Conversion */\
+/* The return type of 'get_total_number_of_tokens()' is 'cc_tokenizer::string_character_traits<char>::int_type', */\
+/* while 'DIMENSIONS::columns' is 'cc_tokenizer::string_character_traits<char>::size_type'. */\
+/* Converting a signed to unsigned is a narrow conversion; it's recommended to avoid such conversions. */\
+/* In future iterations, enhance code consistency by ensuring similar semantics share consistent data types.*/\
 is = Collective<t>{ptr, DIMENSIONS{static_cast<cc_tokenizer::string_character_traits<char>::size_type>(icp.get_total_number_of_tokens()), 1, NULL, NULL}};\
 }\
 ```
