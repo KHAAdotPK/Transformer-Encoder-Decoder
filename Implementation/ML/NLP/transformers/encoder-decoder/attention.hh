@@ -104,7 +104,7 @@ template <typename t = double>
         //template <typename t = float>
         void forward(Collective<t>& ei_query, Collective<t> &ei_key, Collective<t> &ei_value)
         { 
-            Numcy::Random::randn<t>(DIMENSIONS{0, 0, NULL, NULL});
+            //Numcy::Random::randn<t>(DIMENSIONS{0, 0, NULL, NULL});
         }
 
         ~Attention()

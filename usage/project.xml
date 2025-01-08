@@ -19,7 +19,7 @@
     <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
     <ItemDefinitionGroup>
         <ClCompile>
-            <PreprocessorDefinitions Condition="'$(CSVPreprocessorDefinitions)'=='yes'">CSV_EXAMPLE_APPLICATION;CSV_NOT_ALLOW_EMPTY_TOKENS;GRAMMAR_END_OF_TOKEN_MARKER=' ';GRAMMAR_END_OF_LINE_MARKER='\n'</PreprocessorDefinitions>
+           <!-- <PreprocessorDefinitions Condition="'$(CSVPreprocessorDefinitions)'=='yes'">CSV_EXAMPLE_APPLICATION;CSV_NOT_ALLOW_EMPTY_TOKENS;GRAMMAR_END_OF_TOKEN_MARKER=' ';GRAMMAR_END_OF_LINE_MARKER='\n'</PreprocessorDefinitions> -->
         </ClCompile>                
     </ItemDefinitionGroup>
     <ItemGroup>                 

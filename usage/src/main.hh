@@ -85,9 +85,20 @@ lr --lr (Its a hperparameter, sets learning rate)\n\
 sfc --sfc (Scaling factor constant)\n\
 bs batchsize --batchsize (Its a hyperparameter, sets batch size)\n\
 bs_line (Set batch size hyperparameter to line)\n\
-bs_paragraph bs_para (Sets batch size hyperparameter to paragraph)\n"
+bs_paragraph bs_para (Sets batch size hyperparameter to paragraph)\n\
+w1 --w1 (Trained word embeddings for the center/input words. This command expects the name of the file containing these embeddings. If this command is not used, a default file name is assumed for the trained embeddings.)\n"
 
 #define CORPUS_COMMAND "i I -i -I input --input (Path to file which contains input sequences)\n\
 t T -t -T target --target (Path to file which contains target sequences)\n"
+
+#ifdef SKIP_GRAM_EMBEDDNG_VECTOR_SIZE
+#undef SKIP_GRAM_EMBEDDNG_VECTOR_SIZE
+#endif
+#define SKIP_GRAM_EMBEDDNG_VECTOR_SIZE 16
+
+#ifdef SKIP_GRAM_CONTEXT_WINDOW_SIZE
+#undef SKIP_GRAM_CONTEXT_WINDOW_SIZE
+#endif
+#define SKIP_GRAM_CONTEXT_WINDOW_SIZE 6
 
 #endif

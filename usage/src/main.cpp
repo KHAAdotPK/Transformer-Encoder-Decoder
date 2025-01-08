@@ -15,7 +15,7 @@ using cc_tokenizer::allocator;
 
 int main(int argc, char* argv[])
 {
-    ARG arg_bs, arg_bs_line, arg_bs_para, arg_corpus, arg_dmodel, arg_epoch, arg_help, arg_verbose;
+    ARG arg_bs, arg_bs_line, arg_bs_para, arg_corpus, arg_dmodel, arg_epoch, arg_help, arg_verbose, arg_w1;
 
     cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char> argsv_parser(cc_tokenizer::String<char>(COMMAND));
             
@@ -48,8 +48,10 @@ int main(int argc, char* argv[])
     FIND_ARG(argv, argc, argsv_parser, "--dmodel", arg_dmodel);
     FIND_ARG_BLOCK(argv, argc, argsv_parser, arg_dmodel);
     FIND_ARG(argv, argc, argsv_parser, "epoch", arg_epoch);
-    FIND_ARG_BLOCK(argv, argc, argsv_parser, arg_epoch);    
-        
+    FIND_ARG_BLOCK(argv, argc, argsv_parser, arg_epoch);
+    FIND_ARG(argv, argc, argsv_parser, "--w1", arg_w1);
+    FIND_ARG_BLOCK(argv, argc, argsv_parser, arg_w1);
+            
     cc_tokenizer::String<char> input_sequence_data;
     cc_tokenizer::String<char> target_sequence_data;
 
@@ -83,9 +85,11 @@ int main(int argc, char* argv[])
         return 0;  
     }
 
+    
+
     cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char> input_csv_parser(input_sequence_data); 
     cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char> target_csv_parser(target_sequence_data); 
-
+    
     class Corpus input_sequence_vocab;
     class Corpus target_sequence_vocab;
 
@@ -100,6 +104,25 @@ int main(int argc, char* argv[])
         std::cerr << e.what() << std::endl;                
         return 0;
     }
+    
+    /*std::cout<< input_sequence_vocab.numberOfLines() << std::endl;
+    std::cout<< input_sequence_vocab.numberOfTokens() << std::endl;
+    
+    input_csv_parser.reset(LINES);
+    input_csv_parser.reset(TOKENS);
+
+    while (input_csv_parser.go_to_next_line() != cc_tokenizer::string_character_traits<char>::eof())
+    {
+        while (input_csv_parser.go_to_next_token() != cc_tokenizer::string_character_traits<char>::eof())
+        {
+            std::cout<< input_csv_parser.get_current_token().c_str() << ", ";
+
+            std::cout<< input_sequence_vocab(input_csv_parser.get_current_token()) << ", ";
+        }
+
+        std::cout<< std::endl;
+    }
+    return 0;*/
 
     Collective<float> decoderInput;
     Collective<float> divisionTerm;
@@ -108,7 +131,7 @@ int main(int argc, char* argv[])
     Collective<float> position;
     Collective<float> positionEncoding;
     Collective<float> targetSequence;
-
+    
     /*
         d_model
         ---------
@@ -127,7 +150,7 @@ int main(int argc, char* argv[])
     {
         dimensionsOfTheModelHyperparameter = DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER;
     }
-       
+           
     try {
         if (arg_epoch.argc)
         {
