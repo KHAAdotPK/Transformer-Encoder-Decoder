@@ -2,23 +2,34 @@
 setlocal enabledelayedexpansion
 
 set verbose_option=
-set epochs=
+set w1_filename_option="./data/weights/w1p.dat"
+set epochs_option=1
 
-:parse_args
+:start_parsing_args
+
 if "%1"=="verbose" (
     set verbose_option=verbose
-) else (
-    if "%1" neq "" (
-        set /A epochs=%1
-    )
-)
-
-if "%2" neq "" (
     shift
-    goto :parse_args
-)
+    goto :start_parsing_args
+) else if "%1"=="e" (
+    if "%2" neq "" (    
+        set epochs_option=%2        
+        shift
+    ) 
+    shift
+    goto :start_parsing_args
+) else if "%1"=="w1" (
+    if "%2" neq "" (
+        set w1_filename_option="%2"
+        shift
+    )
+    shift
+    goto :start_parsing_args
+) 
 
-@ .\encoder-decoder.exe corpus i ./data/chat/INPUT.txt t ./data/chat/TARGET.txt e %epochs% bs_line %verbose_option%
+@ .\encoder-decoder.exe corpus i ./data/chat/INPUT.txt t ./data/chat/TARGET.txt e %epochs_option% bs_line w1 %w1_filename_option% %verbose_option%
+
+:eof
 
 
  
