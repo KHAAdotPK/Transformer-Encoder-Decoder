@@ -1,3 +1,16 @@
+:: ----------------------------------------------------------------
+:: This script parses command-line arguments for an encoder-decoder
+:: program. It supports the following options:
+::  - "verbose": Enables verbose output
+::  - "e [number]": Sets the number of epochs (default is 1)
+::  - "w1 [filename]": Specifies the path to the weights file
+::
+:: The script loops through arguments using SHIFT and handles each 
+:: option accordingly.
+:: Delayed expansion is enabled to support dynamic variable updates
+:: if needed in future modifications.
+:: ----------------------------------------------------------------
+
 @echo off
 setlocal enabledelayedexpansion
 
