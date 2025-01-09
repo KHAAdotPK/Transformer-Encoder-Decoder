@@ -101,4 +101,10 @@ t T -t -T target --target (Path to file which contains target sequences)\n"
 #endif
 #define SKIP_GRAM_CONTEXT_WINDOW_SIZE 6
 
+#ifndef DEFAULT_W1_FILE_NAME
+#undef DEFAULT_W1_FILE_NAME
+#endif
+#define DEFAULT_W1_FILE_NAME "w1p.dat"
+
+
 #endif

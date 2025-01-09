@@ -84,9 +84,7 @@ int main(int argc, char* argv[])
         std::cerr <<"main(): "<<e.what()<<std::endl;
         return 0;  
     }
-
     
-
     cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char> input_csv_parser(input_sequence_data); 
     cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char> target_csv_parser(target_sequence_data); 
     
@@ -104,6 +102,14 @@ int main(int argc, char* argv[])
         std::cerr << e.what() << std::endl;                
         return 0;
     }
+
+    cc_tokenizer::String<char> file_name_w1 = DEFAULT_W1_FILE_NAME;
+    if (arg_w1.argc)
+    {
+        file_name_w1 = argv[arg_w1.i + 1];
+    }
+
+    std::cout<< file_name_w1.c_str() << std::endl;
     
     /*std::cout<< input_sequence_vocab.numberOfLines() << std::endl;
     std::cout<< input_sequence_vocab.numberOfTokens() << std::endl;
