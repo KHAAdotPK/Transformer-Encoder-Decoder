@@ -104,19 +104,17 @@ catch (ala_exception& e)\
 t *ptr = NULL;\
 try\
 {\
-    /*std::cout<< "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$>>>>>>>>>>>> " << icp.get_current_line_number() << std::endl;*/\
     ptr = cc_tokenizer::allocator<t>().allocate(icp.get_total_number_of_tokens()*w1.getShape().getNumberOfColumns());\
     for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < icp.get_total_number_of_tokens(); i++)\
     {\
-        /*ptr[i] = v(icp.get_token_by_number(i + 1));*/\
-        cc_tokenizer::string_character_traits<char>::size_type j = v(icp.get_token_by_number(i + 1), icp.get_current_line_number(), i + 1);\
-        if (j != INDEX_NOT_FOUND_AT_VALUE)\
+        cc_tokenizer::string_character_traits<char>::size_type index = v(icp.get_token_by_number(i + 1), icp.get_current_line_number(), i + 1);\
+        if (index != INDEX_NOT_FOUND_AT_VALUE)\
         {\
             /* we, target word embedding */\
-            Collective<t> we = w1.slice((j - INDEX_ORIGINATES_AT_VALUE)*w1.getShape().getNumberOfColumns(), w1.getShape().getNumberOfColumns());\
-            for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < we.getShape().getN(); k++)\
+            Collective<t> we = w1.slice((index - INDEX_ORIGINATES_AT_VALUE)*w1.getShape().getNumberOfColumns(), w1.getShape().getNumberOfColumns());\
+            for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < we.getShape().getN(); j++)\
             {\
-                ptr[i*w1.getShape().getNumberOfColumns() + k] = we[k];\
+                ptr[i*we.getShape().getN() + j] = we[j];\
             }\
         }\
     }\
