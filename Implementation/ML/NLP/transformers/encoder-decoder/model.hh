@@ -98,12 +98,28 @@ catch (ala_exception& e)\
     @v, vocabulary, it is input vocabulary
     @icp, input csv parser
     @t, type
+    @w1, Vector of trained weights for center words
  */
-#define BUILD_INPUT_SEQUENCE_FOR_LINE_BATCH_SIZE(is, v, icp, t) {\
+#define BUILD_INPUT_SEQUENCE_FOR_LINE_BATCH_SIZE(is, v, icp, t, w1) {\
 t *ptr = NULL;\
 try\
 {\
-    ptr = cc_tokenizer::allocator<t>().allocate(icp.get_total_number_of_tokens());\
+    /*std::cout<< "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$>>>>>>>>>>>> " << icp.get_current_line_number() << std::endl;*/\
+    ptr = cc_tokenizer::allocator<t>().allocate(icp.get_total_number_of_tokens()*w1.getShape().getNumberOfColumns());\
+    for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < icp.get_total_number_of_tokens(); i++)\
+    {\
+        /*ptr[i] = v(icp.get_token_by_number(i + 1));*/\
+        cc_tokenizer::string_character_traits<char>::size_type j = v(icp.get_token_by_number(i + 1), icp.get_current_line_number(), i + 1);\
+        if (j != INDEX_NOT_FOUND_AT_VALUE)\
+        {\
+            /* we, target word embedding */\
+            Collective<t> we = w1.slice((j - INDEX_ORIGINATES_AT_VALUE)*w1.getShape().getNumberOfColumns(), w1.getShape().getNumberOfColumns());\
+            for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < we.getShape().getN(); k++)\
+            {\
+                ptr[i*w1.getShape().getNumberOfColumns() + k] = we[k];\
+            }\
+        }\
+    }\
 }\
 catch (std::bad_alloc& e)\
 {\
@@ -113,16 +129,17 @@ catch (std::length_error& e)\
 {\
     throw ala_exception(cc_tokenizer::String<char>("BUILD_INPUT_SEQUENCE_FOR_LINE_BATCH_SIZE() Error: ") + cc_tokenizer::String<char>(e.what()));\
 }\
-for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < icp.get_total_number_of_tokens(); i++)\
+catch (ala_exception& e)\
 {\
-    ptr[i] = v(icp.get_token_by_number(i + 1));\
+    throw ala_exception(cc_tokenizer::String<char>("BUILD_INPUT_SEQUENCE_FOR_LINE_BATCH_SIZE() -> ") + cc_tokenizer::String<char>(e.what()));\
 }\
+\
 /* TODO: Eliminate the Need for Narrow Conversion */\
 /* The return type of 'get_total_number_of_tokens()' is 'cc_tokenizer::string_character_traits<char>::int_type', */\
 /* while 'DIMENSIONS::columns' is 'cc_tokenizer::string_character_traits<char>::size_type'. */\
 /* Converting a signed to unsigned is a narrow conversion; it's recommended to avoid such conversions. */\
 /* In future iterations, enhance code consistency by ensuring similar semantics share consistent data types.*/\
-is = Collective<t>{ptr, DIMENSIONS{static_cast<cc_tokenizer::string_character_traits<char>::size_type>(icp.get_total_number_of_tokens()), 1, NULL, NULL}};\
+is = Collective<t>{ptr, DIMENSIONS{w1.getShape().getNumberOfColumns(), static_cast<cc_tokenizer::string_character_traits<char>::size_type>(icp.get_total_number_of_tokens()), NULL, NULL}};\
 }\
 
 /*
@@ -251,9 +268,10 @@ ts = Collective<t>{ptr, DIMENSIONS{static_cast<cc_tokenizer::string_character_tr
     @ts, target sequence
     @t, type
     @v, be verbose when true
+    @w1, vector of trained word embeddings, used as an input sequence
  */
 /*#define TRAINING_LOOP_LINE_BATCH_SIZE(icp, tcp, ei, di, dm, es, iv, tv, p, dt, pe, is, ts, t, v)*/\
-#define TRAINING_LOOP_LINE_BATCH_SIZE(icp, tcp, ei, di, dm, es, iv, tv, p, dt, pe, is, ts, t, v)\
+#define TRAINING_LOOP_LINE_BATCH_SIZE(icp, tcp, ei, di, dm, es, iv, tv, p, dt, pe, is, ts, t, v, w1)\
 {\
     for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < es; i++)\
     {\
@@ -271,17 +289,17 @@ ts = Collective<t>{ptr, DIMENSIONS{static_cast<cc_tokenizer::string_character_tr
             }\
             try\
             {\
-                BUILD_INPUT_SEQUENCE_FOR_LINE_BATCH_SIZE(is, iv, icp, t);\
+                BUILD_INPUT_SEQUENCE_FOR_LINE_BATCH_SIZE(is, iv, icp, t, w1);\
                 std::cout<< is.getShape().getNumberOfColumns() << " - " << is.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
-                BUILD_TARGET_SEQUENCE_FOR_LINE_BATCH_SIZE(ts, tv, tcp, t);\
-                BUILD_POSITION_ENCODING_FOR_LINE_BATCH_SIZE(p, is, dt, dm, pe, t);\
+                /*BUILD_TARGET_SEQUENCE_FOR_LINE_BATCH_SIZE(ts, tv, tcp, t);*/\
+                /*BUILD_POSITION_ENCODING_FOR_LINE_BATCH_SIZE(p, is, dt, dm, pe, t);*/\
                 std::cout<< pe.getShape().getNumberOfColumns() << " - " << pe.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
                 /* Encoder Input */\
-                ei = Numcy::concatenate(pe, is);\
-                BUILD_POSITION_ENCODING_FOR_LINE_BATCH_SIZE(p, is, dt, dm, pe, t);\
+                /*ei = Numcy::concatenate<t>(pe, is);*/\
+                /*(BUILD_POSITION_ENCODING_FOR_LINE_BATCH_SIZE(p, is, dt, dm, pe, t);*/\
                 std::cout<< ei.getShape().getNumberOfColumns() << " - " << ei.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
-                Encoder<t> encoder(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER, DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER);\
-                encoder.forward(ei);\
+                /*Encoder<t> encoder(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER, DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER);*/\
+                /*encoder.forward(ei);*/\
             }\
             catch (ala_exception& e)\
             {\
@@ -325,15 +343,15 @@ ts = Collective<t>{ptr, DIMENSIONS{static_cast<cc_tokenizer::string_character_tr
             {\
                 std::cout << "Status of Forward Pass " << (j + 1) << ", input tokens# "<< icp.get_total_number_of_tokens() << ", target tokens# "<< tcp.get_total_number_of_tokens() << std::endl;\
             }\
-            BUILD_INPUT_SEQUENCE_FOR_LINE_BATCH_SIZE(is, iv, icp, t);\
-            BUILD_TARGET_SEQUENCE_FOR_LINE_BATCH_SIZE(ts, tv, tcp, t);\
-            BUILD_POSITION_ENCODING_FOR_LINE_BATCH_SIZE(p, is, dt, dm, pe, t);\
+            /*BUILD_INPUT_SEQUENCE_FOR_LINE_BATCH_SIZE(is, iv, icp, t);*/\
+            /*BUILD_TARGET_SEQUENCE_FOR_LINE_BATCH_SIZE(ts, tv, tcp, t);*/\
+            /*BUILD_POSITION_ENCODING_FOR_LINE_BATCH_SIZE(p, is, dt, dm, pe, t);*/\
             try\
             {\
                 /* Encoder Input */\
-                ei = Numcy::concatenate(pe, is);\
+                /*ei = Numcy::concatenate(pe, is);*/\
                 /* Decoder Input */\
-                di = Numcy::concatenate(pe, ts);\
+                /*di = Numcy::concatenate(pe, ts);*/\
                 /*Masks*/\
                 /* The srcMask composite is used as masking matrix for the self-attention mechanism in the Transformer model.*/\
                 /* This mask is applied to the attention scores during the self-attention computation to prevent attending to future positions in the sequence. */ \
@@ -347,11 +365,11 @@ ts = Collective<t>{ptr, DIMENSIONS{static_cast<cc_tokenizer::string_character_tr
                     }\
                     std::cout<< std::endl;\
                 }\
-                Collective<t> srcMask = Numcy::triu<t>(Numcy::ones(DIMENSIONS{is.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), is.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), NULL, NULL}), 1);\
+                Collective<t> srcMask = Numcy::triu(Numcy::ones(DIMENSIONS{is.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), is.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), NULL, NULL}), 1);\
                 if (v == true)\
                 {\
                     std::cout<< di.getShape().getN() << std::endl;\
-                    Collective<t> bar = Numcy::ones(DIMENSIONS{di.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), di.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), NULL, NULL});\
+                    Collective<t> bar = Numcy::ones<t>(DIMENSIONS{di.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), di.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), NULL, NULL});\
                     for (int i = 0; i < bar.getShape().getN(); i++)\
                     {\
                         std::cout<<bar[i] << " ";\
@@ -359,7 +377,7 @@ ts = Collective<t>{ptr, DIMENSIONS{static_cast<cc_tokenizer::string_character_tr
                     std::cout<< std::endl;\
                 }\
                 Collective<t> tgtMask = Numcy::triu<t>(Numcy::ones(DIMENSIONS{di.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), di.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), NULL, NULL}), 1);\
-                Encoder<t> encoder(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER, DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER);\
+                Encoder<t> encoder<t>(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER, DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER);\
                 encoder.forward(ei);\
             }\
             catch (ala_exception& e)\

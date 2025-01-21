@@ -81,7 +81,7 @@ int main(int argc, char* argv[])
     }
     catch (ala_exception &e)
     {
-        std::cerr <<"main(): "<<e.what()<<std::endl;
+        std::cerr<< "main() -> "<< e.what()<< std::endl;
         return 0;  
     }
     
@@ -99,7 +99,7 @@ int main(int argc, char* argv[])
     }
     catch (ala_exception& e)
     {
-        std::cerr << e.what() << std::endl;                
+        std::cerr<< "main() -> " << e.what() << std::endl;                
         return 0;
     }
 
@@ -109,8 +109,6 @@ int main(int argc, char* argv[])
         file_name_w1 = argv[arg_w1.i + 1];
     }
 
-    std::cout<< file_name_w1.c_str() << std::endl;
-    
     /*std::cout<< input_sequence_vocab.numberOfLines() << std::endl;
     std::cout<< input_sequence_vocab.numberOfTokens() << std::endl;
     
@@ -133,10 +131,21 @@ int main(int argc, char* argv[])
     Collective<float> decoderInput;
     Collective<float> divisionTerm;
     Collective<float> encoderInput;
-    Collective<float> inputSequence;
+    Collective<double> inputSequence;
     Collective<float> position;
     Collective<float> positionEncoding;
     Collective<float> targetSequence;
+    Collective<double> W1 = Collective<double>{NULL, DIMENSIONS{SKIP_GRAM_EMBEDDNG_VECTOR_SIZE, input_sequence_vocab.numberOfTokens(), NULL, NULL}}; 
+
+    try
+    {    
+        READ_W_BIN(W1, file_name_w1, double);
+    }
+    catch (ala_exception& e)
+    {
+        std::cerr<< "main() -> " << e.what() << std::endl;
+        return 0;
+    }
     
     /*
         d_model
@@ -162,7 +171,7 @@ int main(int argc, char* argv[])
         {
             if (arg_bs_line.i) // Batch size is line
             {                
-                TRAINING_LOOP_LINE_BATCH_SIZE(input_csv_parser, target_csv_parser, encoderInput, decoderInput, dimensionsOfTheModelHyperparameter, std::atoi(argv[arg_epoch.i + 1]), input_sequence_vocab, target_sequence_vocab, position, divisionTerm, positionEncoding, inputSequence, targetSequence, float, arg_verbose.i ? MAKE_IT_VERBOSE_MAIN_HH : !MAKE_IT_VERBOSE_MAIN_HH);
+                TRAINING_LOOP_LINE_BATCH_SIZE(input_csv_parser, target_csv_parser, encoderInput, decoderInput, dimensionsOfTheModelHyperparameter, std::atoi(argv[arg_epoch.i + 1]), input_sequence_vocab, target_sequence_vocab, position, divisionTerm, positionEncoding, inputSequence, targetSequence, double, arg_verbose.i ? MAKE_IT_VERBOSE_MAIN_HH : !MAKE_IT_VERBOSE_MAIN_HH, W1);
             }
             else if (arg_bs_para.i) // Batch size is para
             {
@@ -175,7 +184,7 @@ int main(int argc, char* argv[])
         {
             if (arg_bs_line.i) // Batch size is line
             {             
-                TRAINING_LOOP_LINE_BATCH_SIZE(input_csv_parser, target_csv_parser, encoderInput, decoderInput, dimensionsOfTheModelHyperparameter, DEFAULT_EPOCH_HYPERPARAMETER, input_sequence_vocab, target_sequence_vocab, position, divisionTerm, positionEncoding, inputSequence, targetSequence, float, arg_verbose.i ? MAKE_IT_VERBOSE_MAIN_HH : !MAKE_IT_VERBOSE_MAIN_HH);
+                TRAINING_LOOP_LINE_BATCH_SIZE(input_csv_parser, target_csv_parser, encoderInput, decoderInput, dimensionsOfTheModelHyperparameter, DEFAULT_EPOCH_HYPERPARAMETER, input_sequence_vocab, target_sequence_vocab, position, divisionTerm, positionEncoding, inputSequence, targetSequence, double, arg_verbose.i ? MAKE_IT_VERBOSE_MAIN_HH : !MAKE_IT_VERBOSE_MAIN_HH, W1);
             }
             else if (arg_bs_para.i) // Batch size is para
             {

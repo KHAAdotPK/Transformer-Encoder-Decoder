@@ -8,6 +8,7 @@
 #include "../../Implementation/lib/argsv-cpp/lib/parser/parser.hh"
 #include "../../Implementation/lib/corpus/corpus.hh"
 #include "../../Implementation/lib/sundry/cooked_read_new.hh"
+#include "../../Implementation/lib/read_write_weights/header.hh"
 
 #include "../../Implementation/ML/NLP/transformers/encoder-decoder/model.hh"
 
@@ -104,7 +105,7 @@ t T -t -T target --target (Path to file which contains target sequences)\n"
 #ifndef DEFAULT_W1_FILE_NAME
 #undef DEFAULT_W1_FILE_NAME
 #endif
-#define DEFAULT_W1_FILE_NAME "w1p.dat"
+#define DEFAULT_W1_FILE_NAME "./data/weights/w1p.dat"
 
 
 #endif
