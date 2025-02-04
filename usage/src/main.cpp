@@ -134,7 +134,7 @@ int main(int argc, char* argv[])
     Collective<double> inputSequence;
     Collective<float> position;
     Collective<float> positionEncoding;
-    Collective<float> targetSequence;
+    Collective<double> targetSequence;
     Collective<double> W1 = Collective<double>{NULL, DIMENSIONS{SKIP_GRAM_EMBEDDNG_VECTOR_SIZE, input_sequence_vocab.numberOfTokens(), NULL, NULL}}; 
 
     try
