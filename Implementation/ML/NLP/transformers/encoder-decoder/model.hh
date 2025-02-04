@@ -78,6 +78,16 @@ catch (ala_exception& e)\
  * | BUILD INPUT SEQUENCE WHEN BATCH SIZE IS SET TO A LINE |
  * ---------------------------------------------------------    
  */
+/*
+   Pre-trained Embeddings: For the input sequence, you use pre-trained embeddings (e.g., from Skip-gram or CBOW) to represent each token as a dense vector. 
+   This is beneficial because:
+   - It captures semantic relationships between words.
+   - It provides a meaningful initialization for the model, especially if your dataset is small
+   Why This Approach?
+   - Consistency: The same word always maps to the same index and embedding, ensuring consistent representation.
+   - Efficiency: Reduces memory usage by storing only one embedding per unique word.
+   - Generalization: Helps the model learn patterns based on word identity rather than treating each instance as unique.
+ */
 /* Temporary Solution to Address Compile-Time Error ("narrow conversion") */
 /*
  * If you are confident that the 'int_type(int)' value can be safely accommodated within 'size_t' without loss of data,
@@ -94,11 +104,32 @@ catch (ala_exception& e)\
  * that values of similar semantics share consistent data types. This will enhance code safety and maintainability.
  */
 /*
-    @is, input sequence
-    @v, vocabulary, it is input vocabulary
-    @icp, input csv parser
-    @t, type
-    @w1, Vector of trained weights for center words
+ * Builds an input sequence for a batch of tokens from a line of text.
+ * 
+ * This macro allocates memory and processes tokens to create an input sequence
+ * using pre-trained word embeddings.
+ * 
+ * Parameters:
+ * @is  - Input sequence (output parameter)
+ * @v   - Vocabulary object that maps tokens to indices
+ * @icp - Input CSV parser containing the tokens to process
+ * @t   - Data type for the sequence (e.g., float, double)
+ * @w1  - Matrix of pre-trained word embeddings where each row represents a word vector
+ * 
+ * Implementation:
+ * 1. Allocates memory for all tokens in the current line * embedding dimension
+ * 2. For each token in the line:
+ *    - Looks up the token's index in the vocabulary
+ *    - If found, copies the corresponding word embedding from w1
+ *    - Each word embedding is a row vector from the w1 matrix
+ * 
+ * Error Handling:
+ * - Handles memory allocation failures (bad_alloc)
+ * - Handles length errors
+ * - Handles custom ala_exceptions
+ * - All errors are propagated with additional context
+ * 
+ * Note: Uses zero-based indexing internally with INDEX_ORIGINATES_AT_VALUE offset
  */
 #define BUILD_INPUT_SEQUENCE_FOR_LINE_BATCH_SIZE(is, v, icp, t, w1) {\
 t *ptr = NULL;\
@@ -144,6 +175,20 @@ is = Collective<t>{ptr, DIMENSIONS{w1.getShape().getNumberOfColumns(), static_ca
  * ----------------------------------------------------------
  * | BUILD TARGET SEQUENCE WHEN BATCH SIZE IS SET TO A LINE |
  * ----------------------------------------------------------    
+ */
+/*
+    Target Sequence:
+    Token Indices: For the target sequence, you typically use token indices (integers) from the vocabulary instead of pre-trained embeddings.
+    Here's why:
+    - Task-Specific Learning: The target sequence is usually used for tasks like machine translation,
+      text generation, or sequence prediction. The model learns to predict the next token (or sequence of tokens)
+      based on the input sequence and its own internal representations.
+    - Embedding Layer in Decoder: The decoder has its own embedding layer, 
+      which learns to map token indices to dense vectors during training.
+      This embedding layer is specific to the target vocabulary and is optimized for the task at hand. 
+    - Output Layer: The decoder's output layer predicts the probability distribution over the target vocabulary.
+      This is done using a softmax function, and the model is trained to minimize the cross-entropy loss between
+      the predicted and actual token indices.   
  */
 /* Temporary Solution to Address Compile-Time Error ("narrow conversion") */
 
