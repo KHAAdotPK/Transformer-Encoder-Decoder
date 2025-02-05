@@ -24,7 +24,7 @@ template <typename t = double>
 /*typedef*/ class EncoderLayer
 {   
     //MULTIHEADATTENTION attention;  
-    Attention<float> attention;
+    Attention<t> attention;
 
     cc_tokenizer::string_character_traits<char>::size_type dimensionsOfTheModel, numberOfAttentionHeads;
     float dropOutRate;
@@ -43,7 +43,7 @@ template <typename t = double>
         EncoderLayer(cc_tokenizer::string_character_traits<char>::size_type d_model, cc_tokenizer::string_character_traits<char>::size_type num_heads, float dropout_rate) : dropOutRate(dropout_rate)
         {            
             //attention = MULTIHEADATTENTION(d_model, num_heads);   
-            attention = Attention<float>(d_model, num_heads);
+            attention = Attention<t>(d_model, num_heads);
         }
 
         /*template <typename t = float>*/

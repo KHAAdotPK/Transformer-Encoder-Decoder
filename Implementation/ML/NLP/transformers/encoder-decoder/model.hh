@@ -33,22 +33,21 @@
     @param pe Position encoding array to be filled with values.
     @param s Collective instance representing Numcy::sin<t>((p * dt)).
 */
-#define FILL_EVEN_INDICES_OF_POSITION_ENCODING(pe, s)\
+#define FILL_EVEN_INDICES_OF_POSITION_ENCODING(pe, s) {\
+try\
 {\
-    try\
+    for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < s.getShape().getDimensionsOfArray().getNumberOfInnerArrays(); i+=2)\
     {\
-        for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < s.getShape().getDimensionsOfArray().getNumberOfInnerArrays(); i+=2)\
+        for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < s.getShape().getNumberOfColumns(); j++)\
         {\
-            for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < s.getShape().getNumberOfColumns(); j++)\
-            {\
-                pe[i*pe.getShape().getNumberOfColumns() + j] = s[i*s.getShape().getNumberOfColumns() + j];\
-            }\
+            pe[i*pe.getShape().getNumberOfColumns() + j] = s[i*s.getShape().getNumberOfColumns() + j];\
         }\
     }\
-    catch (ala_exception& e)\
-    {\
-        throw ala_exception(cc_tokenizer::String<char>("FILL_EVEN_INDICES_OF_POSITION_ENCODING() -> ") + e.what());\
-    }\
+}\
+catch (ala_exception& e)\
+{\
+    throw ala_exception(cc_tokenizer::String<char>("FILL_EVEN_INDICES_OF_POSITION_ENCODING() -> ") + e.what());\
+}\
 }\
 
 #define FILL_EVEN_INDICES_OF_POSITION_ENCODING_OLD(pe, s) {\
@@ -76,23 +75,22 @@ catch (ala_exception& e)\
     @param pe Position encoding array to be filled with values.
     @param s Collective instance containing values to be assigned to odd indices.
 */
-#define FILL_ODD_INDICES_OF_POSITION_ENCODING(pe, s)\
+#define FILL_ODD_INDICES_OF_POSITION_ENCODING(pe, s) {\
+try\
 {\
-    try\
+    for (cc_tokenizer::string_character_traits<char>::size_type i = 1; i < s.getShape().getDimensionsOfArray().getNumberOfInnerArrays(); i+=2)\
     {\
-        for (cc_tokenizer::string_character_traits<char>::size_type i = 1; i < s.getShape().getDimensionsOfArray().getNumberOfInnerArrays(); i+=2)\
+        for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < s.getShape().getNumberOfColumns(); j++)\
         {\
-            for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < s.getShape().getNumberOfColumns(); j++)\
-            {\
-                /* Assign the sine function result to odd indices of the position encoding array.*/\
-                pe[i*pe.getShape().getNumberOfColumns() + j] = s[i*s.getShape().getNumberOfColumns() + j];\
-            }\
+            /* Assign the sine function result to odd indices of the position encoding array.*/\
+            pe[i*pe.getShape().getNumberOfColumns() + j] = s[i*s.getShape().getNumberOfColumns() + j];\
         }\
     }\
-    catch (ala_exception& e)\
-    {\
-        throw ala_exception(cc_tokenizer::String<char>("FILL_ODD_INDICES_OF_POSITION_ENCODING() -> ") + e.what());\
-    }\
+}\
+catch (ala_exception& e)\
+{\
+    throw ala_exception(cc_tokenizer::String<char>("FILL_ODD_INDICES_OF_POSITION_ENCODING() -> ") + e.what());\
+}\
 }\
 
 #define FILL_ODD_INDICES_OF_POSITION_ENCODING_OLD(pe, s) {\
@@ -147,11 +145,11 @@ catch (ala_exception& e)\
  * using pre-trained word embeddings.
  * 
  * Parameters:
- * @is  - Input sequence (output parameter)
+ * @is  - An output parameter of type Collective<t> that will store the final input sequence.
  * @v   - Vocabulary object that maps tokens to indices
- * @icp - Input CSV parser containing the tokens to process
- * @t   - Data type for the sequence (e.g., float, double)
- * @w1  - Matrix of pre-trained word embeddings where each row represents a word vector
+ * @icp - Input CSV parser object representing the input corpus, which provides token-related information.
+ * @t   - The data type of embeddings (e.g., float, double).
+ * @w1  - Matrix of pre-trained word embeddings where each row represents a word vector.
  * 
  * Implementation:
  * 1. Allocates memory for all tokens in the current line * embedding dimension
@@ -175,10 +173,11 @@ try\
     ptr = cc_tokenizer::allocator<t>().allocate(icp.get_total_number_of_tokens()*w1.getShape().getNumberOfColumns());\
     for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < icp.get_total_number_of_tokens(); i++)\
     {\
+        /* Get the index of the token in the vocabulary. These indices originate at INDEX_ORIGINATE_AT_VALUE */\
         cc_tokenizer::string_character_traits<char>::size_type index = v(icp.get_token_by_number(i + 1), icp.get_current_line_number(), i + 1);\
         if (index != INDEX_NOT_FOUND_AT_VALUE)\
         {\
-            /* we, target word embedding */\
+            /* we, Word Embedding */\
             Collective<t> we = w1.slice((index - INDEX_ORIGINATES_AT_VALUE)*w1.getShape().getNumberOfColumns(), w1.getShape().getNumberOfColumns());\
             for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < we.getShape().getN(); j++)\
             {\
@@ -244,10 +243,10 @@ is = Collective<t>{ptr, DIMENSIONS{w1.getShape().getNumberOfColumns(), static_ca
  * that values of similar semantics share consistent data types. This will enhance code safety and maintainability.
  */
 /*
-    @ts, target sequence
-    @v, vocabulary, it is target vocabulary
-    @tcp, target csv parser
-    @t, type
+    @ts, An output parameter of type `Collective<t>` that will store the final target sequence.
+    @v, A callable object that maps tokens to their corresponding vocabulary indices.
+    @tcp, An object representing the target corpus, which provides token-related information.
+    @t, The data type for storing token indices
  */
 #define BUILD_TARGET_SEQUENCE_FOR_LINE_BATCH_SIZE(ts, v, tcp, t) {\
 t *ptr = NULL;\
@@ -265,6 +264,7 @@ catch (std::length_error& e)\
 }\
 for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < tcp.get_total_number_of_tokens(); i++)\
 {\
+    /* Get the index of the token in the vocabulary. These indices originate at INDEX_ORIGINATE_AT_VALUE */\
     ptr[i] = v(tcp.get_token_by_number(i + 1));\
 }\
 /* TODO: Eliminate the Need for Narrow Conversion */\
@@ -274,34 +274,56 @@ for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < tcp.get_t
 /* In future iterations, enhance code consistency by ensuring similar semantics share consistent data types.*/\
 ts = Collective<t>{ptr, DIMENSIONS{static_cast<cc_tokenizer::string_character_traits<char>::size_type>(tcp.get_total_number_of_tokens()), 1, NULL, NULL}};\
 }\
-
 /*
-    @p, position an instance of Collective composite
-    @is, input sequence
-    @dt, division term
-    @dm, dimensions of the model(d_model)
-    @pe, position encoding
-    @t, type
+ *  ---------------------------------------------------------
+ * | BUILD POSITION ENCODING WHEN BATCH SIZE IS A SINGLE LINE |
+ *  ---------------------------------------------------------    
+ */
+/**
+ * @brief Constructs position encoding for a batch of input sequences.
+ *
+ * This macro generates position encoding vectors that will be used in 
+ * transformer-based models to retain positional information.
+ *
+ * @param p  An output parameter of type `Collective<t>` representing position indices.
+ * @param is An input tensor representing the input sequence batch.
+ * @param dt Division Term, an output parameter of type `Collective<t>` representing the scaling term.
+ * @param dm The model's embedding dimension.
+ * @param pe An output parameter of type `Collective<t>` that stores the final position encodings.
+ * @param t The data type for computations (e.g., float, double).
+ *
+ * Functionality:
+ * - Computes position indices (`p`) using `Numcy::arange()`, representing sequence positions.
+ * - Computes the scaling term (`dt`) using an exponential function with a predefined scaling factor.
+ * - Initializes the position encoding tensor (`pe`) with zeros.
+ * - Applies sine functions to compute position encoding values.
+ * - Fills even and odd indices separately using helper macros.
  */
 #define BUILD_POSITION_ENCODING_FOR_LINE_BATCH_SIZE(p, is, dt, dm, pe, t) {\
-    try\
-    {\
-        p = Collective<t>{Numcy::arange<t, t>((t)0.0, (t)is.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), (t)1.0, DIMENSIONS{1, is.getShape().getNumberOfColumns(), NULL, NULL}),  DIMENSIONS{1, is.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), NULL, NULL}};\
+try\
+{\
+    /* Generate position indices: range from 0 to input sequence length(exclusive) */\
+    p = Collective<t>{Numcy::arange<t, t>((t)0.0, (t)is.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), (t)1.0, DIMENSIONS{1, /*is.getShape().getNumberOfColumns()*/ is.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), NULL, NULL}),  DIMENSIONS{1, is.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), NULL, NULL}};\
         std::cout<< "p = " << p.getShape().getNumberOfColumns() << " - " << p.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
-        dt = Collective<t>{Numcy::exp<t>(Numcy::arange<t, t>((t)0.0, (t)dm, (t)2.0, DIMENSIONS{dm, 1, NULL, NULL}), dm), DIMENSIONS{dm, 1, NULL, NULL}};\
-        dt = dt * (t)(SCALING_FACTOR(SCALING_FACTOR_CONSTANT, dm));\
-        pe = Numcy::zeros<t>(DIMENSIONS{dm, is.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), NULL, NULL});\
+    /* Compute scaling term dt using an exponential function */\
+    dt = Collective<t>{Numcy::exp<t>(Numcy::arange<t, t>((t)0.0, (t)dm, (t)2.0, DIMENSIONS{dm, 1, NULL, NULL}), dm), DIMENSIONS{dm, 1, NULL, NULL}};\
+    /* Scale dt by a predefined scaling factor */ \
+    dt = dt * (t)(SCALING_FACTOR(SCALING_FACTOR_CONSTANT, dm));\
+    /* Initialize position encoding tensor with zeros */\
+    pe = Numcy::zeros<t>(DIMENSIONS{dm, is.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), NULL, NULL});\
         /* Please read the comments */\
         std::cout<< "dt = " << dt.getShape().getNumberOfColumns() << " - " << dt.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
-        Collective<t> product = Numcy::sin<t>(p * dt);\
+    /* Compute sine-transformed position encodings */\
+    Collective<t> product = Numcy::sin<t>(p * dt);\
         std::cout<< "product = " << product.getShape().getNumberOfColumns() << " - " << product.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
-        FILL_EVEN_INDICES_OF_POSITION_ENCODING(pe,  product);\
-        FILL_ODD_INDICES_OF_POSITION_ENCODING(pe, product);\
-    }\
-    catch (ala_exception& e)\
-    {\
-        throw ala_exception(cc_tokenizer::String<char>("BUILD_POSITION_ENCODING_FOR_LINE_BATCH_SIZE() -> ") + cc_tokenizer::String<char>(e.what()));\
-    }\
+    /* Fill even and odd indices of position encoding */ \
+    FILL_EVEN_INDICES_OF_POSITION_ENCODING(pe,  product);\
+    FILL_ODD_INDICES_OF_POSITION_ENCODING(pe, product);\
+}\
+catch (ala_exception& e)\
+{\
+    throw ala_exception(cc_tokenizer::String<char>("BUILD_POSITION_ENCODING_FOR_LINE_BATCH_SIZE() -> ") + cc_tokenizer::String<char>(e.what()));\
+}\
 }\
 
 /*
@@ -374,16 +396,16 @@ ts = Collective<t>{ptr, DIMENSIONS{static_cast<cc_tokenizer::string_character_tr
                 BUILD_INPUT_SEQUENCE_FOR_LINE_BATCH_SIZE(is, iv, icp, t, w1);\
                 std::cout<< "is = " << is.getShape().getNumberOfColumns() << " - " << is.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
                 BUILD_TARGET_SEQUENCE_FOR_LINE_BATCH_SIZE(ts, tv, tcp, t);\
-                /*std::cout<< "ts = " << ts.getShape().getNumberOfColumns() << " - " << ts.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;*/\
+                std::cout<< "ts = " << ts.getShape().getNumberOfColumns() << " - " << ts.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
                 BUILD_POSITION_ENCODING_FOR_LINE_BATCH_SIZE(p, is, dt, dm, pe, t);\
                 std::cout<< "pe = " << pe.getShape().getNumberOfColumns() << " - " << pe.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
-                std::cout<<" --------------------------------------------> " << std::endl;\
                 /* Encoder Input */\
-                /*ei = Numcy::concatenate<t>(pe, is);*/\
-                /*(BUILD_POSITION_ENCODING_FOR_LINE_BATCH_SIZE(p, is, dt, dm, pe, t);*/\
-                /*std::cout<< ei.getShape().getNumberOfColumns() << " - " << ei.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;*/\
-                /*Encoder<t> encoder(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER, DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER);*/\
-                /*encoder.forward(ei);*/\
+                /*  pe = nx64, is = nx16 */\
+                ei = Numcy::concatenate<t>(pe, is);\
+                std::cout<< "ei = " << ei.getShape().getNumberOfColumns() << " - " << ei.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
+                Encoder<t> encoder(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER, DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER);\
+                encoder.forward(ei);\
+                std::cout<<" --------------------------------------------> " << std::endl;\
             }\
             catch (ala_exception& e)\
             {\
