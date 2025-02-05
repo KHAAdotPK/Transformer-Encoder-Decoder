@@ -68,7 +68,7 @@ This repository contains an implementation of the **Transformer encoder-decoder 
 ```
 Implementation/
 ├── lib/
-│ ├── ala_wxcwption/
+│ ├── ala_wlaexception/
 │ ├── allocator/
 │ ├── argsv-cpp/
 │ ├── corpus/
@@ -92,9 +92,13 @@ usage/
 ├── src/
 │ ├── main.cpp
 │ ├── main.hh
-weights/
-├── w1p.dat
-├── w2p.dat
+├── data/
+│ ├── chat/
+| │ ├── INPUT.txt
+| │ ├── TARGET.txt
+│ ├── weights/
+| │ ├── w1p.dat
+| │ ├── w2p.dat
 ```
 
 #### License

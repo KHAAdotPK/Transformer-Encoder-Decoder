@@ -91,7 +91,7 @@ catch (ala_exception& e)\
     }\
     catch (ala_exception& e)\
     {\
-        throw ala_exception(cc_tokenizer::String<char>("FILL_EVEN_INDICES_OF_POSITION_ENCODING() -> ") + e.what());\
+        throw ala_exception(cc_tokenizer::String<char>("FILL_ODD_INDICES_OF_POSITION_ENCODING() -> ") + e.what());\
     }\
 }\
 
