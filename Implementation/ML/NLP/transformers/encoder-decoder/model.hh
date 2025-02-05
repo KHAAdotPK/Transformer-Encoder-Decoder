@@ -33,7 +33,25 @@
     @param pe Position encoding array to be filled with values.
     @param s Collective instance representing Numcy::sin<t>((p * dt)).
 */
-#define FILL_EVEN_INDICES_OF_POSITION_ENCODING(pe, s) {\
+#define FILL_EVEN_INDICES_OF_POSITION_ENCODING(pe, s)\
+{\
+    try\
+    {\
+        for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < s.getShape().getDimensionsOfArray().getNumberOfInnerArrays(); i+=2)\
+        {\
+            for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < s.getShape().getNumberOfColumns(); j++)\
+            {\
+                pe[i*pe.getShape().getNumberOfColumns() + j] = s[i*s.getShape().getNumberOfColumns() + j];\
+            }\
+        }\
+    }\
+    catch (ala_exception& e)\
+    {\
+        throw ala_exception(cc_tokenizer::String<char>("FILL_EVEN_INDICES_OF_POSITION_ENCODING() -> ") + e.what());\
+    }\
+}\
+
+#define FILL_EVEN_INDICES_OF_POSITION_ENCODING_OLD(pe, s) {\
 try\
 {\
     for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < s.getShape().getN(); i+=2)\
@@ -46,7 +64,7 @@ catch (ala_exception& e)\
 {\
     throw ala_exception(cc_tokenizer::String<char>("FILL_EVEN_INDICES_OF_POSITION_ENCODING() Error: ") + e.what());\
 }\
-}
+}\
 
 /*
     @brief Fills odd indices of the position encoding array with values from a Collective instance.
@@ -58,7 +76,26 @@ catch (ala_exception& e)\
     @param pe Position encoding array to be filled with values.
     @param s Collective instance containing values to be assigned to odd indices.
 */
-#define FILL_ODD_INDICES_OF_POSITION_ENCODING(pe, s) {\
+#define FILL_ODD_INDICES_OF_POSITION_ENCODING(pe, s)\
+{\
+    try\
+    {\
+        for (cc_tokenizer::string_character_traits<char>::size_type i = 1; i < s.getShape().getDimensionsOfArray().getNumberOfInnerArrays(); i+=2)\
+        {\
+            for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < s.getShape().getNumberOfColumns(); j++)\
+            {\
+                /* Assign the sine function result to odd indices of the position encoding array.*/\
+                pe[i*pe.getShape().getNumberOfColumns() + j] = s[i*s.getShape().getNumberOfColumns() + j];\
+            }\
+        }\
+    }\
+    catch (ala_exception& e)\
+    {\
+        throw ala_exception(cc_tokenizer::String<char>("FILL_EVEN_INDICES_OF_POSITION_ENCODING() -> ") + e.what());\
+    }\
+}\
+
+#define FILL_ODD_INDICES_OF_POSITION_ENCODING_OLD(pe, s) {\
 try\
 {\
     for (cc_tokenizer::string_character_traits<char>::size_type i = 1; i < s.getShape().getN(); i+=2)\
@@ -71,7 +108,7 @@ catch (ala_exception& e)\
 {\
     throw ala_exception(cc_tokenizer::String<char>("FILL_EVEN_INDICES_OF_POSITION_ENCODING() Error: ") + e.what());\
 }\
-}
+}\
 
 /*
  * ---------------------------------------------------------
@@ -249,12 +286,15 @@ ts = Collective<t>{ptr, DIMENSIONS{static_cast<cc_tokenizer::string_character_tr
 #define BUILD_POSITION_ENCODING_FOR_LINE_BATCH_SIZE(p, is, dt, dm, pe, t) {\
     try\
     {\
-        p = Collective<t>{Numcy::arange<t, t>((t)0.0, (t)is.getShape().getNumberOfColumns(), (t)1.0, DIMENSIONS{1, is.getShape().getNumberOfColumns(), NULL, NULL}),  DIMENSIONS{1, is.getShape().getNumberOfColumns(), NULL, NULL}};\
+        p = Collective<t>{Numcy::arange<t, t>((t)0.0, (t)is.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), (t)1.0, DIMENSIONS{1, is.getShape().getNumberOfColumns(), NULL, NULL}),  DIMENSIONS{1, is.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), NULL, NULL}};\
+        std::cout<< "p = " << p.getShape().getNumberOfColumns() << " - " << p.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
         dt = Collective<t>{Numcy::exp<t>(Numcy::arange<t, t>((t)0.0, (t)dm, (t)2.0, DIMENSIONS{dm, 1, NULL, NULL}), dm), DIMENSIONS{dm, 1, NULL, NULL}};\
         dt = dt * (t)(SCALING_FACTOR(SCALING_FACTOR_CONSTANT, dm));\
-        pe = Numcy::zeros<t>(DIMENSIONS{dm, is.getShape().getNumberOfColumns(), NULL, NULL});\
+        pe = Numcy::zeros<t>(DIMENSIONS{dm, is.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), NULL, NULL});\
         /* Please read the comments */\
+        std::cout<< "dt = " << dt.getShape().getNumberOfColumns() << " - " << dt.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
         Collective<t> product = Numcy::sin<t>(p * dt);\
+        std::cout<< "product = " << product.getShape().getNumberOfColumns() << " - " << product.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
         FILL_EVEN_INDICES_OF_POSITION_ENCODING(pe,  product);\
         FILL_ODD_INDICES_OF_POSITION_ENCODING(pe, product);\
     }\
@@ -263,7 +303,6 @@ ts = Collective<t>{ptr, DIMENSIONS{static_cast<cc_tokenizer::string_character_tr
         throw ala_exception(cc_tokenizer::String<char>("BUILD_POSITION_ENCODING_FOR_LINE_BATCH_SIZE() -> ") + cc_tokenizer::String<char>(e.what()));\
     }\
 }\
-
 
 /*
     @p, position an instance of Collective composite
@@ -276,14 +315,14 @@ ts = Collective<t>{ptr, DIMENSIONS{static_cast<cc_tokenizer::string_character_tr
 #define BUILD_POSITION_ENCODING_FOR_LINE_BATCH_SIZE_OLD(p, is, dt, dm, pe, t) {\
     try\
     {\
-        t* ptr = Numcy::arange<t, t>((t)0.0, (t)is.getShape().getNumberOfColumns()/*[NUMCY_DIMENSIONS_SHAPE_COLUMNS]*/, (t)1.0, DIMENSIONS{1, is.getShape().getNumberOfColumns()/*[NUMCY_DIMENSIONS_SHAPE_COLUMNS]*/, NULL, NULL});\
+        t* ptr = Numcy::arange<t, t>((t)0.0, (t)is.getShape().getDimensionsOfArray().getInnerMostArrays(), (t)1.0, DIMENSIONS{1, is.getShape().getDimensionsOfArray().getInnerMostArrays(), NULL, NULL});\
         p = Collective<t>{ptr,  DIMENSIONS{1, is.getShape().getNumberOfColumns()/*[NUMCY_DIMENSIONS_SHAPE_COLUMNS]*/, NULL, NULL}};\
         /*std::cout<< ">>>> " << p.getShape().getDimensionsOfArray()[p.getShape().getDimensionsOfArray().getN() - 1] << std::endl;*/\
         dt = Numcy::exp<t>(Numcy::arange<t, t>((t)0.0, (t)dm, (t)2.0, DIMENSIONS{dm/2, 1, NULL, NULL}), dm/2);\
         /*std::cout<< ">>>>> " << dt.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;*/\
         /*dt = Numcy::dot(p, dt);*/\
         dt = dt * (t)(SCALING_FACTOR(SCALING_FACTOR_CONSTANT, dm));\
-        pe = Numcy::zeros<t>(DIMENSIONS{dm, is.getShape().getNumberOfColumns()/*[NUMCY_DIMENSIONS_SHAPE_COLUMNS]*/, NULL, NULL});\
+        pe = Numcy::zeros<t>(DIMENSIONS{dm, is.getShape().getDimensionsOfArray().getInnerMostArrays(), NULL, NULL});\
         /* Please read the comments */\
         Collective<t> product = Numcy::sin<t>(p * dt);\
         FILL_EVEN_INDICES_OF_POSITION_ENCODING(pe, /*Numcy::sin<t>((p * dt))*/ product);\
@@ -335,8 +374,10 @@ ts = Collective<t>{ptr, DIMENSIONS{static_cast<cc_tokenizer::string_character_tr
                 BUILD_INPUT_SEQUENCE_FOR_LINE_BATCH_SIZE(is, iv, icp, t, w1);\
                 std::cout<< "is = " << is.getShape().getNumberOfColumns() << " - " << is.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
                 BUILD_TARGET_SEQUENCE_FOR_LINE_BATCH_SIZE(ts, tv, tcp, t);\
-                std::cout<< "ts = " << ts.getShape().getNumberOfColumns() << " - " << ts.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
-                /*BUILD_POSITION_ENCODING_FOR_LINE_BATCH_SIZE(p, is, dt, dm, pe, t);*/\
+                /*std::cout<< "ts = " << ts.getShape().getNumberOfColumns() << " - " << ts.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;*/\
+                BUILD_POSITION_ENCODING_FOR_LINE_BATCH_SIZE(p, is, dt, dm, pe, t);\
+                std::cout<< "pe = " << pe.getShape().getNumberOfColumns() << " - " << pe.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
+                std::cout<<" --------------------------------------------> " << std::endl;\
                 /* Encoder Input */\
                 /*ei = Numcy::concatenate<t>(pe, is);*/\
                 /*(BUILD_POSITION_ENCODING_FOR_LINE_BATCH_SIZE(p, is, dt, dm, pe, t);*/\

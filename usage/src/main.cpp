@@ -129,14 +129,14 @@ int main(int argc, char* argv[])
     return 0;*/
 
     Collective<float> decoderInput;
-    Collective<float> divisionTerm;
-    Collective<float> encoderInput;
+    Collective<double> divisionTerm;
+    Collective<double> encoderInput;
     Collective<double> inputSequence;
-    Collective<float> position;
-    Collective<float> positionEncoding;
+    Collective<double> position;
+    Collective<double> positionEncoding;
     Collective<double> targetSequence;
     Collective<double> W1 = Collective<double>{NULL, DIMENSIONS{SKIP_GRAM_EMBEDDNG_VECTOR_SIZE, input_sequence_vocab.numberOfTokens(), NULL, NULL}}; 
-
+    
     try
     {    
         READ_W_BIN(W1, file_name_w1, double);
@@ -146,7 +146,7 @@ int main(int argc, char* argv[])
         std::cerr<< "main() -> " << e.what() << std::endl;
         return 0;
     }
-    
+
     /*
         d_model
         ---------
