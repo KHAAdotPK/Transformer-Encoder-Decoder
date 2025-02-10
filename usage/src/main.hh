@@ -10,7 +10,7 @@
 #include "../../Implementation/lib/sundry/cooked_read_new.hh"
 #include "../../Implementation/lib/read_write_weights/header.hh"
 
-#include "../../Implementation/ML/NLP/transformers/encoder-decoder/model.hh"
+#include "../../Implementation/ML/NLP/transformers/encoder-decoder/header.hh"
 
 #ifndef TRANSFORMERS_CODER_ENCODER_MODULE_MAIN_HH
 #define TRANSFORMERS_CODER_ENCODER_MODULE_MAIN_HH
@@ -106,6 +106,5 @@ t T -t -T target --target (Path to file which contains target sequences)\n"
 #undef DEFAULT_W1_FILE_NAME
 #endif
 #define DEFAULT_W1_FILE_NAME "./data/weights/w1p.dat"
-
 
 #endif

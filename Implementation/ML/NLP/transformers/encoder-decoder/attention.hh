@@ -1,5 +1,5 @@
 /*
-    lib/NLP/transformers/encoder-decoder/attention.hh
+    ML/NLP/transformers/encoder-decoder/attention.hh 
     Q@khaa.pk
  */
 
@@ -12,13 +12,14 @@
     Multi head attention.
  */
 template <typename t = double>
-/*typedef*/ class Attention // is all you need.
+class Attention // is all you need.
 {
     cc_tokenizer::string_character_traits<char>::size_type dimensionsOfAttentionHead, dimensionsOfTheModel, numberOfAttentionHeads;
     Collective<t> queryWeights, keyWeights, valueWeights, outputWeights;
+    t scaleFactor;
 
     public:
-        Attention(void) : dimensionsOfAttentionHead(floor((double)(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER/DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER))), dimensionsOfTheModel(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER), numberOfAttentionHeads(DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER)
+        Attention(void) : dimensionsOfAttentionHead(floor((t)(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER/DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER))), dimensionsOfTheModel(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER), numberOfAttentionHeads(DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER), scaleFactor(0)
         {   
             /*DIMENSIONS dim3 = {10, 3, NULL, NULL};
             DIMENSIONS dim2 = {0, 10, &dim3, NULL};
@@ -35,7 +36,7 @@ template <typename t = double>
             @d_model, name from the paper "Attention is all we need" we call it "dimensionsOfTheModel". 
             @num_heads, Number of attention heads.            
          */
-        Attention(cc_tokenizer::string_character_traits<char>::size_type d_model, cc_tokenizer::string_character_traits<char>::size_type num_heads) : dimensionsOfAttentionHead((double)(d_model/num_heads)), dimensionsOfTheModel(d_model), numberOfAttentionHeads(num_heads)
+        Attention(cc_tokenizer::string_character_traits<char>::size_type d_model, cc_tokenizer::string_character_traits<char>::size_type num_heads) : dimensionsOfAttentionHead((t)(d_model/num_heads)), dimensionsOfTheModel(d_model), numberOfAttentionHeads(num_heads)
         { 
             /*DIMENSIONS dim3 = DIMENSIONS{10, 3, NULL, NULL};
             DIMENSIONS dim2 = DIMENSIONS{0, 10, &dim3, NULL};
@@ -56,6 +57,8 @@ template <typename t = double>
             valueWeights = Numcy::Random::randn<t>(dim);
 
             outputWeights = Numcy::Random::randn<t>(dim);
+
+            scaleFactor = sqrt(d_model / num_heads);  // Scaling factor for stability
         }
 
         /*
@@ -81,12 +84,11 @@ template <typename t = double>
             model to learn relationships between any two words within the sequence, regardless of their order. 
             This is crucial for capturing long-range dependencies and the overall context of the input.         
          */
-
         /*            
             @ei_query, 
             - Represents the sequence of queries on which attention is being computed.
             - Each query is a vector that's compared to keys(@ei_key) to determine relevant values.
-            - It's like asking a question to gat a focus on specific parts of the input.            
+            - It's like asking a question to get a focus on specific parts of the input.            
             @ei_key,
             - Contains the keys used to compute attention scores for each query.
             - Each key corresponds to a value in the @ei_value tensor.
@@ -100,11 +102,48 @@ template <typename t = double>
             2 The model learns to assign higher attention scores to key-value pairs that are more relevant to the given query.
             - The return value...
             3 The final output of the forward method is the weighted sum of the values, where the weights are the normalized attention scores.
-         */
-        //template <typename t = float>
-        void forward(Collective<t>& ei_query, Collective<t> &ei_key, Collective<t> &ei_value)
-        { 
-            //Numcy::Random::randn<t>(DIMENSIONS{0, 0, NULL, NULL});
+         */        
+        Collective<t> forward(Collective<t>& ei_query, Collective<t>& ei_key, Collective<t>& ei_value)
+        {             
+            /*
+                Linear transformations, compute queries, keys, and values
+             */
+
+            /*
+                It makes sense to use singular names (query, key, value) because:
+                - Each line is processed independently (not as a batch).
+                - Each token gets transformed into a query, key, and value vector separately before attention is applied.
+             */
+            Collective<t> query, key, value, scores;
+            /*
+                It makes sense to keep scores and attention_weights in plural form because:
+                - Each query attends to multiple keys → The result is a matrix of scores.
+                - Softmax produces multiple attention weights (one for each query-key pair).
+             */
+            Collective<t> attention_weights;
+
+            Collective<t> output;
+            
+            try
+            {
+                query = Numcy::matmul<t>(ei_query, queryWeights);
+                key = Numcy::matmul<t>(ei_key, keyWeights);
+                value = Numcy::matmul<t>(ei_value, valueWeights);
+                // Compute scaled dot-product attention scores
+                scores = Numcy::matmul<t>(query, Numcy::transpose(key)); // scaleFactor
+                // Apply softmax to get attention weights   
+                attention_weights = softmax<t>(scores);
+                // Multiply by value
+                output = Numcy::matmul<t>(attention_weights, value);  
+                // Apply output transformation
+                output = Numcy::matmul<t>(output, outputWeights);
+            }
+            catch(ala_exception& e)
+            {
+                throw ala_exception(cc_tokenizer::String<char>("Attention::forward() -> ") + cc_tokenizer::String<char>(e.what()));
+            }
+            
+            return output;
         }
 
         ~Attention()

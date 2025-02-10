@@ -1,5 +1,5 @@
 /*
-    lib/NLP/transformers/encoder-decoder/model.hh
+    ML/NLP/transformers/encoder-decoder/model.hh
     Q@khaa.pk
  */
 
@@ -7,6 +7,76 @@
 
 #ifndef NLP_ENCODER_DECODER_TRANSFORMER_MODEL_HH
 #define NLP_ENCODER_DECODER_TRANSFORMER_MODEL_HH
+
+/*
+    The softmax function is a mathematical transformation that converts a vector of real numbers 
+    into a probability distribution. This ensures:
+      - All output values lie between 0 and 1.
+      - The sum of all output values is 1.
+
+    In the context of CBOW (Continuous Bag of Words):
+      - The input to softmax is the **predicted output scores** (logits) from the hidden layer.
+      - These scores are obtained after taking the average of word embeddings from the context words 
+        and multiplying them with the weight matrix W2.
+      - The softmax function then converts these scores into probabilities, representing the likelihood 
+        of each word in the vocabulary being the correct target word.
+
+    Parameters:
+      - a: Collective<T> 
+        A vector of real-valued numbers representing the unnormalized logits (raw scores) 
+        from the output layer of the CBOW model.
+
+      - verbose: bool (optional, default = false)
+        If true, prints intermediate steps (useful for debugging).
+
+    Returns:
+      - Collective<T>
+        A probability distribution over the vocabulary, where each value represents the probability 
+        of the corresponding word being the correct target word.
+
+    The computation follows these steps:
+      1. Subtract the maximum value from all elements for numerical stability.
+      2. Apply the exponential function.
+      3. Normalize by dividing each element by the sum of all exponentiated values.
+
+    This ensures that the output probabilities do not suffer from floating-point precision issues 
+    and remain numerically stable.
+*/
+template <typename T>
+Collective<T> softmax(Collective<T>& a, bool verbose = false) throw (ala_exception)
+{
+    Collective<T> m; // max
+    Collective<T> a_m; // a minus m 
+    Collective<T> e_a_m; // exp over a_m
+    Collective<T> s_e_a_m; // sum of e_a_m
+    Collective<T> e_a_minus_max_divided_by_e_a_minus_max_sum;    
+
+    try
+    {
+        m = Numcy::max(a); // Max value for numerical stability
+        a_m = Numcy::subtract(a, m); // a - max(a)
+        e_a_m = Numcy::exp(a_m); // exp(a - max(a))  
+        s_e_a_m = Numcy::sum(e_a_m); // sum(exp(a - max(a)))
+        /*
+            m is max
+            a_m, a minus m
+            e_a_m, exp over a_m
+            s_e_a_m, sum of e_a_m
+         */
+        /*
+            Normalization step:
+            Each element is divided by the sum of all exponentiated values 
+            to ensure that the sum of the output probabilities is exactly 1.
+         */
+        e_a_minus_max_divided_by_e_a_minus_max_sum = Numcy::divide(e_a_m, s_e_a_m);     
+    }
+    catch(ala_exception& e)
+    {        
+        throw ala_exception(cc_tokenizer::String<char>("softmax() -> ") + cc_tokenizer::String<char>(e.what()));
+    }
+    
+    return e_a_minus_max_divided_by_e_a_minus_max_sum;
+}
 
 /*          
     @brief Computes sine and cosine values for a templated type and fills even and odd indices of the position encoding array.
@@ -403,7 +473,8 @@ catch (ala_exception& e)\
                 /*  pe = nx64, is = nx16 */\
                 ei = Numcy::concatenate<t>(pe, is);\
                 std::cout<< "ei = " << ei.getShape().getNumberOfColumns() << " - " << ei.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
-                Encoder<t> encoder(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER, DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER);\
+                /*Encoder<t> encoder(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER, DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER);*/\
+                Encoder<t> encoder(ei.getShape().getNumberOfColumns(), DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER);\
                 encoder.forward(ei);\
                 std::cout<<" --------------------------------------------> " << std::endl;\
             }\

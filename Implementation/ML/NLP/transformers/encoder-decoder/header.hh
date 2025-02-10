@@ -78,7 +78,11 @@
 /* ------------------------ */
 
 #include "./attention.hh"
-#include "./encoderlayer.hh"
+#include "./EncoderFeedForwardNetwork.hh"
+#include "./EncoderLayerNormalization.hh"
+#include "./EncoderLayer.hh"
 #include "./encoder.hh"
+
+#include "./model.hh"
 
 #endif

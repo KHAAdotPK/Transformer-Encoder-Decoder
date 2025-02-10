@@ -128,7 +128,7 @@ int main(int argc, char* argv[])
     }
     return 0;*/
 
-    Collective<float> decoderInput;
+    Collective<double> decoderInput;
     Collective<double> divisionTerm;
     Collective<double> encoderInput;
     Collective<double> inputSequence;

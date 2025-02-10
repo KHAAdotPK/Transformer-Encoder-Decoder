@@ -1,5 +1,5 @@
 /*
-    lib/NLP/transformers/encoder-decoder/encoder.hh
+    ML/NLP/transformers/encoder-decoder/encoder.hh
     Q@khaa.pk
  */
 
@@ -16,8 +16,9 @@ class Encoder
     /*
         Instead of one encoder we have few. 
      */
-    /*ENCODERLAYERLIST_PTR*/ EncoderLayerList<t>* encoderLayerListHead;
-    float dropOutRate;
+    EncoderLayerList<t>* encoderLayerListHead;
+
+    t dropOutRate;
 
     public:
         Encoder(void) : dimensionsOfTheModel(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER), numberOfLayers(DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER), numberOfAttentionHeads(DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER), dropOutRate(DEFAULT_DROP_OUT_RATE_HYPERPARAMETER), encoderLayerListHead(NULL)
@@ -106,7 +107,7 @@ class Encoder
                     delete current->ptr;
                     current->ptr = NULL;
 
-                    cc_tokenizer::allocator<char>().deallocate(reinterpret_cast<char*>(current));
+                    cc_tokenizer::allocator<char>().deallocate(reinterpret_cast<char*>(current), sizeof(EncoderLayerList<t>));
                     current = next;                    
                 }                                
             }                           
