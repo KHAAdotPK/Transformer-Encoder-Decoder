@@ -85,7 +85,9 @@ Implementation/
 │ │ │ ├── encoder-decoder/
 │ │ │ │ ├── attention.hh
 │ │ │ │ ├── encoder.hh
+│ │ │ │ ├── EncoderFeedForwardNetwork.hh
 │ │ │ │ ├── encoderlayer.hh
+│ │ │ │ ├── EncoderLayerNormalization.hh
 │ │ │ │ ├── header.hh
 │ │ │ │ ├── model.hh
 usage/
