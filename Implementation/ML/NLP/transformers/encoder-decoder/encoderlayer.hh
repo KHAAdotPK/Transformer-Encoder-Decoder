@@ -66,15 +66,45 @@ class EncoderLayer
         void forward(Collective<t>& ei)
         {
             /*
-                The forward method of the ENCODERLAYER class call the forward method of the MULTIHEADATTENTION class with the same argument ei(encoder input) passed three times for query, key, and value.
-                This might seem redundant at first glance, but there's a specific reason for it.
+                The output of MULTIHEADATTENTION::forward() is typically a transformed representation of the input sequence, where each token's representation has been updated based on attention over all tokens in the sequence. In a Transformer encoder, this output is usually processed further in the following steps:
 
-                While it may seem like a repetition, using the same argument for query, key, and value in the MultiHeadAttention call 
-                enables self-attention, a fundamental mechanism for Transformers to understand the relationships within a sequence.
+                What to Do with the Output of MULTIHEADATTENTION::forward()?
+                1. Pass it to the Feed-Forward Network (FFN)
+                   - The multi-head self-attention output is fed into a position-wise feed-forward network (FFN).
+                   - In this implementation it corespondes to passing it to EncoderFeedForwardNetwork::forward():
+                     EncoderFeedForwardNetwork::forward(output);
 
-                Read more about in the comment section of MULTIHEADATTENTION::forward()
-             */            
-            attention.forward(ei, ei, ei);
+                2. Apply Layer Normalization
+                   - After adding a residual connection (if applicable), the output is normalized.
+                   - In this implementation it correspondes to EncoderLayerNormalization::forward():
+                     ENCODERLayerNormlization::forward(output);
+                
+                3. Add Residual Connection (Optional, but Important in Transformer)
+                   - If this is a standard Transformer encoder implementation, then add a residual connection before applying layer normalization.
+                   output = input + output;  // Residual connection
+                   EncoderLayerNormalization::forward(output);
+                
+                4. Use it as Input for the Next Encoder Layer (If Using Stacked Encoders)
+                   - If Transformer encoder implementation has multiple layers, the output of this layer becomes the input to the next encoder layer.
+                
+                5. Pass to the Decoder (If Implementing an Encoder-Decoder Model)
+                   - If this is part of an encoder-decoder Transformer (e.g., for machine translation), the final encoder output will be used as input to the decoder.   
+             */
+            Collective<t> output;
+
+            try 
+            {
+               /*
+                    The forward method of the ENCODERLAYER class call the forward method of the MULTIHEADATTENTION class with the same argument ei(encoder input) passed three times for query, key, and value.
+                    This might seem redundant at first glance, but there's a specific reason for it.
+
+                    While it may seem like a repetition, using the same argument for query, key, and value in the MultiHeadAttention call 
+                    enables self-attention, a fundamental mechanism for Transformers to understand the relationships within a sequence.
+
+                    Read more about in the comment section of MULTIHEADATTENTION::forward()
+                */                           
+                output = attention.forward(ei, ei, ei);
+            }
         }
 
         ~EncoderLayer()

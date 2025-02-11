@@ -129,8 +129,28 @@ class Attention // is all you need.
                 query = Numcy::matmul<t>(ei_query, queryWeights);
                 key = Numcy::matmul<t>(ei_key, keyWeights);
                 value = Numcy::matmul<t>(ei_value, valueWeights);
+                
                 // Compute scaled dot-product attention scores
                 scores = Numcy::matmul<t>(query, Numcy::transpose(key)); // scaleFactor
+
+                /*
+                    Do You Need src_mask?
+                    If input sequences are of equal length and don't have padding, then src_mask might not be meeded. However, it's best to support it for flexibility later.
+
+                    In a Transformer encoder, src_mask (source mask) is typically used in the self-attention mechanism to:
+                    1. Prevent attending to padding tokens (mask out padded positions in the input).
+                    2. Control which tokens can attend to which (if needed, like in some structured data cases).
+
+                    What You Need to Do?
+                    If you're using matmul(Q, K^T), apply the mask before softmax:
+                    attention_scores = attention_scores + src_mask;  // Apply mask  
+
+                    Make sure src_mask has negative infinity (-inf) where padding exists, so softmax turns those values into 0.
+
+                    Check Your Attention Class:
+                    If your attention implementation already accepts a mask parameter, you should pass src_mask from the encoder when calling forward().
+                 */
+
                 // Apply softmax to get attention weights   
                 attention_weights = softmax<t>(scores);
                 // Multiply by value

@@ -21,10 +21,14 @@ This repository contains an implementation of the **Transformer encoder-decoder 
 - Positional encodings are added to the input embeddings before being passed to the encoder.
 
 ### **4. Encoder Implementation (In Progress)**
-- Defined the structure for the **encoder**, including multi-head self-attention and feed-forward layers.
-- Implemented **self-attention masks** to prevent attending to future tokens.
-- Work in progress: Integrating residual connections and layer normalization.
-
+- Defined the structure for the **encoder**, including: 
+  - **Multi-head self-attention** with masking support.
+  - **Feed-forward layers** with `ReLU` activation.
+  - **Layer normalization** after each sub-layer.
+  - **Droupout** for regularization.
+  - **Residual connections** for stable gradient flow.
+- Implemented **self-attention masks** to prevent attending to future tokens(`padding tokens`).
+- Work in progress: Testing attention outputs and integrating them with feed-forward layers.
 ### **5. Training Loop**
 - Set up a basic training loop to process input and target sequences.
 - Implemented functionality to handle multiple epochs and batches.
@@ -34,21 +38,22 @@ This repository contains an implementation of the **Transformer encoder-decoder 
 
 ## **Future Implementation Goals**
 
-### **1. Complete the Encoder**
-- Finish implementing the **multi-head self-attention mechanism**.
-- Add **residual connections** and **layer normalization** after each sub-layer.
-- Implement the **feed-forward network** (FFN) with ReLU activation.
+### **1. Finalize the Encoder**
+- Verify correct functionality of **multi-head self-attention**.
+- Ensure residual connections and **layer normalization** are correctly applied.
+- Optimize the **feed-forward network** (FFN) for computational efficiency.
 
 ### **2. Implement the Decoder**
 - Build the **decoder** with:
-  - **Self-attention** (with masking to prevent attending to future tokens).
+  - **Masked self-attention** (with masking to prevent attending to future tokens).
   - **Cross-attention** to attend to the encoder's output.
-  - **Feed-forward network** (FFN).
-- Add residual connections and layer normalization after each sub-layer.
+  - **Feed-forward network** (FFN) with `ReLU` activation.
+- Integrate residual connections and layer normalization after each sub-layer.
 
-### **3. Combine Encoder and Decoder**
+### **3. Integrate Encoder and Decoder**
 - Pass the encoder's output to the decoder.
-- Ensure the dimensions of all inputs and outputs match.
+- Ensure attention mechanisms function correctly across both components.
+- Validate that input-output dimensions remain consistent throughout processing.
 
 ### **4. Loss Function and Optimization**
 - Implement a **cross-entropy loss function** for sequence-to-sequence tasks.
@@ -102,6 +107,9 @@ usage/
 | │ ├── w1p.dat
 | │ ├── w2p.dat
 ```
+
+#### Contributing
+Contributions are welcome! Feel free to open an issue or submit a pull request if you would like to improve the implementation.
 
 #### License
 This project is governed by a license, the details of which can be located in the accompanying file named 'LICENSE.' Please refer to this file for comprehensive information.

@@ -71,6 +71,14 @@
 /*
     Typical values for number of layers in the Transformer model range from 4 to 8 or even higher, depending on the specific application.
     It's common to have an equal number of layers in both the encoder and decoder parts of the Transformer.
+
+    Section 3.1 of "Attention Is All You Need".
+    The encoder is composed of a stack of N = 6 identical layers. Each layer has two sub-layers. 
+    The first is a multi-head self-attention mechanism, and the second is a simple, position wise fully connected 
+    feed-forward network. We employ a residual connection [11] around each of the two sub-layers, followed by layer 
+    normalization [1]. That is, the output of each sub-layer is LayerNorm(x + Sublayer(x)), where Sublayer(x) is the 
+    function implemented by the sub-layer itself. To facilitate these residual connections, all sub-layers in the model,
+    as well as the embedding layers, produce outputs of dimension d_model = 512
  */
 #define DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER 0x04
 
