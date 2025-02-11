@@ -68,7 +68,7 @@ This repository contains an implementation of the **Transformer encoder-decoder 
 ```
 Implementation/
 ├── lib/
-│ ├── ala_wlaexception/
+│ ├── ala_exception/
 │ ├── allocator/
 │ ├── argsv-cpp/
 │ ├── corpus/
