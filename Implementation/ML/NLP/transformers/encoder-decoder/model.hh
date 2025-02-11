@@ -204,7 +204,7 @@ catch (ala_exception& e)\
  * whereas the type of 'DIMENSIONS::columns' is 'cc_tokenizer::string_character_traits<char>::size_type'.
  * Converting a signed integer to its unsigned equivalent is considered a "narrow conversion,"
  * which may lead to unexpected behavior. It is advisable to avoid such conversions whenever possible.
-
+ *   
  * In future iterations of the codebase, consider revising the design of the parser and related entities to ensure
  * that values of similar semantics share consistent data types. This will enhance code safety and maintainability.
  */
@@ -222,7 +222,7 @@ catch (ala_exception& e)\
  * @w1  - Matrix of pre-trained word embeddings where each row represents a word vector.
  * 
  * Implementation:
- * 1. Allocates memory for all tokens in the current line * embedding dimension
+ * 1. Allocates memory for all tokens * embedding dimension in the current line
  * 2. For each token in the line:
  *    - Looks up the token's index in the vocabulary
  *    - If found, copies the corresponding word embedding from w1
@@ -233,8 +233,9 @@ catch (ala_exception& e)\
  * - Handles length errors
  * - Handles custom ala_exceptions
  * - All errors are propagated with additional context
- * 
- * Note: Uses zero-based indexing internally with INDEX_ORIGINATES_AT_VALUE offset
+ *  
+ * Note: The Vocabulary object uses internal indexing that starts at INDEX_ORIGINATES_AT_VALUE.
+ *       In contrast, word embeddings use zero-based indexing (starting at 0).
  */
 #define BUILD_INPUT_SEQUENCE_FOR_LINE_BATCH_SIZE(is, v, icp, t, w1) {\
 t *ptr = NULL;\
@@ -297,18 +298,16 @@ is = Collective<t>{ptr, DIMENSIONS{w1.getShape().getNumberOfColumns(), static_ca
       the predicted and actual token indices.   
  */
 /* Temporary Solution to Address Compile-Time Error ("narrow conversion") */
-
+/* ---------------------------------------------------------------------- */ 
 /* If you are confident that the 'int_type' value can be safely accommodated within 'size_t' without loss of data,
  * you can use a 'static_cast' to perform the conversion. However, exercise caution when using this approach.
-
 /* TODO: Eliminate the Need for the Following "Narrow Conversion" */
-
 /* 
  * The return type of 'get_total_number_of_tokens()' is 'cc_tokenizer::string_character_traits<char>::int_type',
  * whereas the type of 'DIMENSIONS::columns' is 'cc_tokenizer::string_character_traits<char>::size_type'.
  * Converting a signed integer to its unsigned equivalent is considered a "narrow conversion,"
  * which may lead to unexpected behavior. It is advisable to avoid such conversions whenever possible.
-
+ *
  * In future iterations of the codebase, consider revising the design of the parser and related entities to ensure
  * that values of similar semantics share consistent data types. This will enhance code safety and maintainability.
  */
@@ -318,32 +317,49 @@ is = Collective<t>{ptr, DIMENSIONS{w1.getShape().getNumberOfColumns(), static_ca
     @tcp, An object representing the target corpus, which provides token-related information.
     @t, The data type for storing token indices
  */
-#define BUILD_TARGET_SEQUENCE_FOR_LINE_BATCH_SIZE(ts, v, tcp, t) {\
-t *ptr = NULL;\
-try\
+#define BUILD_TARGET_SEQUENCE_FOR_LINE_BATCH_SIZE(ts, v, tcp, t)\
 {\
-    ptr = cc_tokenizer::allocator<t>().allocate(tcp.get_total_number_of_tokens());\
+    t *ptr = NULL;\
+    try\
+    {\
+        ptr = cc_tokenizer::allocator<t>().allocate(tcp.get_total_number_of_tokens());\
+    }\
+    catch (std::bad_alloc& e)\
+    {\
+        throw ala_exception(cc_tokenizer::String<char>("BUILD_TARGET_SEQUENCE_FOR_LINE_BATCH_SIZE() Error: ") + cc_tokenizer::String<char>(e.what()));\
+    }\
+    catch (std::length_error& e)\
+    {\
+        throw ala_exception(cc_tokenizer::String<char>("BUILD_TARGET_SEQUENCE_FOR_LINE_BATCH_SIZE() Error: ") + cc_tokenizer::String<char>(e.what()));\
+    }\
+    for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < tcp.get_total_number_of_tokens(); i++)\
+    {\
+        /* Get the index of the token in the vocabulary. These indices originate at INDEX_ORIGINATE_AT_VALUE */\
+        ptr[i] = v(tcp.get_token_by_number(i + 1));\
+    }\
+    /* TODO: Eliminate the Need for Narrow Conversion */\
+    /* The return type of 'get_total_number_of_tokens()' is 'cc_tokenizer::string_character_traits<char>::int_type', */\
+    /* while 'DIMENSIONS::columns' is 'cc_tokenizer::string_character_traits<char>::size_type'. */\
+    /* Converting a signed to unsigned is a narrow conversion; it's recommended to avoid such conversions. */\
+    /* In future iterations, enhance code consistency by ensuring similar semantics share consistent data types.*/\
+    ts = Collective<t>{ptr, DIMENSIONS{static_cast<cc_tokenizer::string_character_traits<char>::size_type>(tcp.get_total_number_of_tokens()), 1, NULL, NULL}};\
 }\
-catch (std::bad_alloc& e)\
-{\
-    throw ala_exception(cc_tokenizer::String<char>("BUILD_TARGET_SEQUENCE_FOR_LINE_BATCH_SIZE() Error: ") + cc_tokenizer::String<char>(e.what()));\
-}\
-catch (std::length_error& e)\
-{\
-    throw ala_exception(cc_tokenizer::String<char>("BUILD_TARGET_SEQUENCE_FOR_LINE_BATCH_SIZE() Error: ") + cc_tokenizer::String<char>(e.what()));\
-}\
-for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < tcp.get_total_number_of_tokens(); i++)\
-{\
-    /* Get the index of the token in the vocabulary. These indices originate at INDEX_ORIGINATE_AT_VALUE */\
-    ptr[i] = v(tcp.get_token_by_number(i + 1));\
-}\
-/* TODO: Eliminate the Need for Narrow Conversion */\
-/* The return type of 'get_total_number_of_tokens()' is 'cc_tokenizer::string_character_traits<char>::int_type', */\
-/* while 'DIMENSIONS::columns' is 'cc_tokenizer::string_character_traits<char>::size_type'. */\
-/* Converting a signed to unsigned is a narrow conversion; it's recommended to avoid such conversions. */\
-/* In future iterations, enhance code consistency by ensuring similar semantics share consistent data types.*/\
-ts = Collective<t>{ptr, DIMENSIONS{static_cast<cc_tokenizer::string_character_traits<char>::size_type>(tcp.get_total_number_of_tokens()), 1, NULL, NULL}};\
-}\
+
+/*
+ *  ------------------------------------------------------------------------------------------------
+ * | IMPORTANT NOTE: NON-DETERMINISTIC BEHAVIOR IN BUILD_POSITION_ENCODING_FOR_LINE_BATCH_SIZE MACRO |
+ *  ------------------------------------------------------------------------------------------------
+ *
+ * The macro `BUILD_POSITION_ENCODING_FOR_LINE_BATCH_SIZE` may not produce the same output values for 
+ * the same input values due to the following reason/s:
+ * 1. **Floating-Point Precision**: 
+ *    - The use of floating-point arithmetic (e.g., `Numcy::sin`, `Numcy::exp`, and multiplication) 
+ *      can introduce small numerical errors, leading to slightly different results even for identical 
+ *      inputs.
+ * 2. **External Dependencies**:
+ *    - The macro relies on external functions like `Numcy::arange`, `Numcy::exp`, and `Numcy::sin`, 
+ *      whose implementations might not be deterministic or could depend on external state.
+ */ 
 /*
  *  ---------------------------------------------------------
  * | BUILD POSITION ENCODING WHEN BATCH SIZE IS A SINGLE LINE |
@@ -372,7 +388,7 @@ ts = Collective<t>{ptr, DIMENSIONS{static_cast<cc_tokenizer::string_character_tr
 #define BUILD_POSITION_ENCODING_FOR_LINE_BATCH_SIZE(p, is, dt, dm, pe, t) {\
 try\
 {\
-    /* Generate position indices: range from 0 to input sequence length(exclusive) */\
+    /* Generate position indices: range from 0 to input sequence length(exclusive), length is the number of tokens in the line */\
     p = Collective<t>{Numcy::arange<t, t>((t)0.0, (t)is.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), (t)1.0, DIMENSIONS{1, /*is.getShape().getNumberOfColumns()*/ is.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), NULL, NULL}),  DIMENSIONS{1, is.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), NULL, NULL}};\
         std::cout<< "p = " << p.getShape().getNumberOfColumns() << " - " << p.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
     /* Compute scaling term dt using an exponential function */\
