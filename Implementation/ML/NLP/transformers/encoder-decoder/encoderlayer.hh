@@ -105,6 +105,10 @@ class EncoderLayer
                 */                           
                 output = attention.forward(ei, ei, ei);
             }
+            catch(ala_exception& e)
+            {
+                throw ala_exception(cc_tokenizer::String<char>("EncoderLayer::forward() -> ") + cc_tokenizer::String<char>(e.what()));
+            }
         }
 
         ~EncoderLayer()
