@@ -221,6 +221,15 @@ catch (ala_exception& e)\
  * @mntpl - Each input sequence is padded to ensure uniform length across variable-length sequences per line. 
  *          The value of maximum number of tokens/sequences per line (mntpl) determines the size of all input sequences. 
  *          If an input line has fewer tokens, padding is added to match the required length.
+ *          PLEASE IMPROVE THIS COMMENT ABOUT @mask    
+ * @mask  - Padding tokens should not receive valid position encodings because they do not contribute to the model’s 
+ *          understanding of sequence structure(padding tokens are added to make all input sequences 
+ *          uniform in length). 
+ *          Since positional encodings influence attention weights, allowing padding tokens to have meaningful encodings
+ *          might lead to misleading attention patterns.
+ *          You need a mask that differentiates real tokens from padding tokens. The mask should have:
+ *          Value (DEFAULT_VALID_WORD_VECTOR_MASK_VALUE) for real tokens (to keep their positional encoding).
+ *          Value (DEFAULT_PADDING_WORD_VECTOR_VALUE) for padding tokens (to zero out their positional encoding).
  * @t     - The data type of embeddings (e.g., float, double).
  * @w1    - Matrix of pre-trained word embeddings where each row represents a word vector.
  * 
@@ -230,6 +239,12 @@ catch (ala_exception& e)\
  *    - Looks up the token's index in the vocabulary
  *    - If found, copies the corresponding word embedding from w1
  *    - Each word embedding is a row vector from the w1 matrix
+ * 3. Mask Setting in this Macro:
+ *    - Memory is allocated for the mask (`ptr_mask`), with all values initially set to `DEFAULT_PADDING_WORD_VECTOR_VALUE`.
+ *    - Inside the loop, when a valid token is found in the vocabulary, its corresponding mask index is set to `DEFAULT_VALID_WORD_VECTOR_MASK` (typically 1).
+ *    - Padding tokens remain with their initial value (`DEFAULT_PADDING_WORD_VECTOR_VALUE`, typically 0), ensuring they are ignored in position encoding calculations.
+ *    - Finally, the mask is wrapped in a `Collective<t>` object for use in downstream processing.
+ *    (PLEASE NOTE:-  Implementation can ignore trailing padding, example: If all sequences are mntpl=10, but only the first 7 positions contain valid tokens, you can use sequence_length=7 instead of a mask.) 
  * 
  * Error Handling:
  * - Handles memory allocation failures (bad_alloc)
@@ -240,18 +255,30 @@ catch (ala_exception& e)\
  * Note: The Vocabulary object uses internal indexing that starts at INDEX_ORIGINATES_AT_VALUE.
  *       In contrast, word embeddings use zero-based indexing (starting at 0).
  */
-#define BUILD_INPUT_SEQUENCE_FOR_LINE_BATCH_SIZE(is, v, icp, mntpl, t, w1) {\
-t *ptr = NULL;\
+#define BUILD_INPUT_SEQUENCE_FOR_LINE_BATCH_SIZE(is, v, icp, mntpl, mask, t, w1) {\
+t *ptr = NULL, *ptr_mask = NULL;\
 try\
 {\
     ptr = cc_tokenizer::allocator<t>().allocate(/*icp.get_total_number_of_tokens()*/ mntpl*w1.getShape().getNumberOfColumns());\
-    memset(ptr, DEFAULT_PADDING_WORD_VECTOR_VALUE, mntpl*w1.getShape().getNumberOfColumns());\
+    /* Post-Padding instead of Pre-Padding or Mixed-Padding */\
+    /* Here, using post-padding by allocating memory for a fixed-length sequence (mntpl) and filling it with real tokens first, */\
+    /* followed by padding. This means that all padding appears at the end, not in the middle or mixed with real tokens. */\
+    ptr_mask = cc_tokenizer::allocator<t>().allocate(mntpl);\
+    memset(ptr, (t)DEFAULT_PADDING_WORD_VECTOR_VALUE, mntpl*w1.getShape().getNumberOfColumns());\
+    memset(ptr_mask, (t)DEFAULT_PADDING_WORD_VECTOR_VALUE, mntpl);\
     for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < icp.get_total_number_of_tokens(); i++)\
     {\
         /* Get the index of the token in the vocabulary. These indices originate at INDEX_ORIGINATE_AT_VALUE */\
         cc_tokenizer::string_character_traits<char>::size_type index = v(icp.get_token_by_number(i + 1), icp.get_current_line_number(), i + 1);\
+        /* If this condition is true, we are no longer strictly using post-padding; instead, padding tokens may appear */\
+        /* between valid tokens, leading to mixed padding. */\
+        /* TODO: Investigate whether the following statement can ever evaluate to true, and under what circumstances */\
+        /* mixed padding might occur. */\
         if (index != INDEX_NOT_FOUND_AT_VALUE)\
         {\
+            /* Marking real tokens with a valid mask value */\
+            ptr_mask[i] = (t)DEFAULT_VALID_WORD_VECTOR_MASK_VALUE;\
+            \
             /* we, Word Embedding */\
             Collective<t> we = w1.slice((index - INDEX_ORIGINATES_AT_VALUE)*w1.getShape().getNumberOfColumns(), w1.getShape().getNumberOfColumns());\
             for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < we.getShape().getN(); j++)\
@@ -280,6 +307,8 @@ catch (ala_exception& e)\
 /* Converting a signed to unsigned is a narrow conversion; it's recommended to avoid such conversions. */\
 /* In future iterations, enhance code consistency by ensuring similar semantics share consistent data types.*/\
 is = Collective<t>{ptr, DIMENSIONS{w1.getShape().getNumberOfColumns(), /*static_cast<cc_tokenizer::string_character_traits<char>::size_type>(icp.get_total_number_of_tokens())*/ mntpl, NULL, NULL}};\
+/* Assigning the mask to ensure padding tokens (0) do not receive position encodings */\
+mask = Collective<t>{ptr_mask, DIMENSIONS{1, mntpl, NULL, NULL}};\
 }\
 
 /*
@@ -485,7 +514,8 @@ catch (ala_exception& e)\
             }\
             try\
             {\
-                BUILD_INPUT_SEQUENCE_FOR_LINE_BATCH_SIZE(is, iv, icp, mntpl, t, w1);\
+                Collective<t> mask;\
+                BUILD_INPUT_SEQUENCE_FOR_LINE_BATCH_SIZE(is, iv, icp, mntpl, mask, t, w1);\
                 std::cout<< "is = " << is.getShape().getNumberOfColumns() << " - " << is.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
                 BUILD_TARGET_SEQUENCE_FOR_LINE_BATCH_SIZE(ts, tv, tcp, t);\
                 std::cout<< "ts = " << ts.getShape().getNumberOfColumns() << " - " << ts.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
