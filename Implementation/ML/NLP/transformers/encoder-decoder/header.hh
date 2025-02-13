@@ -85,6 +85,7 @@
 /* Hyperparameters end here */
 /* ------------------------ */
 
+#include "./hyperparameters.hh"
 #include "./attention.hh"
 #include "./EncoderFeedForwardNetwork.hh"
 #include "./EncoderLayerNormalization.hh"

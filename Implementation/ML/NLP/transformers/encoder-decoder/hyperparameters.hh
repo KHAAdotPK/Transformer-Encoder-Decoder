@@ -1,0 +1,13 @@
+/*
+    ML/NLP/transformers/encoder-decoder/hyperparameters.hh
+    Q@khaa.pk
+ */
+
+#ifndef NLP_ENCODER_DECODER_TRANSFORMER_MODEL_HYPERPARAMETERS_HH
+#define NLP_ENCODER_DECODER_TRANSFORMER_MODEL_HYPERPARAMETERS_HH
+
+#ifndef DEFAULT_PADDING_WORD_VECTOR_VALUE
+#define DEFAULT_PADDING_WORD_VECTOR_VALUE 0
+#endif
+
+#endif

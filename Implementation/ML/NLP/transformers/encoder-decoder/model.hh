@@ -215,11 +215,14 @@ catch (ala_exception& e)\
  * using pre-trained word embeddings.
  * 
  * Parameters:
- * @is  - An output parameter of type Collective<t> that will store the final input sequence.
- * @v   - Vocabulary object that maps tokens to indices
- * @icp - Input CSV parser object representing the input corpus, which provides token-related information.
- * @t   - The data type of embeddings (e.g., float, double).
- * @w1  - Matrix of pre-trained word embeddings where each row represents a word vector.
+ * @is    - An output parameter of type Collective<t> that will store the final input sequence.
+ * @v     - Vocabulary object that maps tokens to indices
+ * @icp   - Input CSV parser object representing the input corpus, which provides token-related information.
+ * @mntpl - Each input sequence is padded to ensure uniform length across variable-length sequences per line. 
+ *          The value of maximum number of tokens/sequences per line (mntpl) determines the size of all input sequences. 
+ *          If an input line has fewer tokens, padding is added to match the required length.
+ * @t     - The data type of embeddings (e.g., float, double).
+ * @w1    - Matrix of pre-trained word embeddings where each row represents a word vector.
  * 
  * Implementation:
  * 1. Allocates memory for all tokens * embedding dimension in the current line
@@ -237,11 +240,12 @@ catch (ala_exception& e)\
  * Note: The Vocabulary object uses internal indexing that starts at INDEX_ORIGINATES_AT_VALUE.
  *       In contrast, word embeddings use zero-based indexing (starting at 0).
  */
-#define BUILD_INPUT_SEQUENCE_FOR_LINE_BATCH_SIZE(is, v, icp, t, w1) {\
+#define BUILD_INPUT_SEQUENCE_FOR_LINE_BATCH_SIZE(is, v, icp, mntpl, t, w1) {\
 t *ptr = NULL;\
 try\
 {\
-    ptr = cc_tokenizer::allocator<t>().allocate(icp.get_total_number_of_tokens()*w1.getShape().getNumberOfColumns());\
+    ptr = cc_tokenizer::allocator<t>().allocate(/*icp.get_total_number_of_tokens()*/ mntpl*w1.getShape().getNumberOfColumns());\
+    memset(ptr, DEFAULT_PADDING_WORD_VECTOR_VALUE, mntpl*w1.getShape().getNumberOfColumns());\
     for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < icp.get_total_number_of_tokens(); i++)\
     {\
         /* Get the index of the token in the vocabulary. These indices originate at INDEX_ORIGINATE_AT_VALUE */\
@@ -275,7 +279,7 @@ catch (ala_exception& e)\
 /* while 'DIMENSIONS::columns' is 'cc_tokenizer::string_character_traits<char>::size_type'. */\
 /* Converting a signed to unsigned is a narrow conversion; it's recommended to avoid such conversions. */\
 /* In future iterations, enhance code consistency by ensuring similar semantics share consistent data types.*/\
-is = Collective<t>{ptr, DIMENSIONS{w1.getShape().getNumberOfColumns(), static_cast<cc_tokenizer::string_character_traits<char>::size_type>(icp.get_total_number_of_tokens()), NULL, NULL}};\
+is = Collective<t>{ptr, DIMENSIONS{w1.getShape().getNumberOfColumns(), /*static_cast<cc_tokenizer::string_character_traits<char>::size_type>(icp.get_total_number_of_tokens())*/ mntpl, NULL, NULL}};\
 }\
 
 /*
@@ -463,6 +467,8 @@ catch (ala_exception& e)\
 /*#define TRAINING_LOOP_LINE_BATCH_SIZE(icp, tcp, ei, di, dm, es, iv, tv, p, dt, pe, is, ts, t, v)*/\
 #define TRAINING_LOOP_LINE_BATCH_SIZE(icp, tcp, ei, di, dm, es, iv, tv, p, dt, pe, is, ts, t, v, w1)\
 {\
+    /* maximum number of tokens per line */\
+    cc_tokenizer::string_character_traits<char>::size_type mntpl = icp.max_sequence_length();\
     for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < es; i++)\
     {\
         if (v == true)\
@@ -479,7 +485,7 @@ catch (ala_exception& e)\
             }\
             try\
             {\
-                BUILD_INPUT_SEQUENCE_FOR_LINE_BATCH_SIZE(is, iv, icp, t, w1);\
+                BUILD_INPUT_SEQUENCE_FOR_LINE_BATCH_SIZE(is, iv, icp, mntpl, t, w1);\
                 std::cout<< "is = " << is.getShape().getNumberOfColumns() << " - " << is.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
                 BUILD_TARGET_SEQUENCE_FOR_LINE_BATCH_SIZE(ts, tv, tcp, t);\
                 std::cout<< "ts = " << ts.getShape().getNumberOfColumns() << " - " << ts.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
