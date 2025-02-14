@@ -220,8 +220,7 @@ catch (ala_exception& e)\
  * @icp   - Input CSV parser object representing the input corpus, which provides token-related information.
  * @mntpl - Each input sequence is padded to ensure uniform length across variable-length sequences per line. 
  *          The value of maximum number of tokens/sequences per line (mntpl) determines the size of all input sequences. 
- *          If an input line has fewer tokens, padding is added to match the required length.
- *          PLEASE IMPROVE THIS COMMENT ABOUT @mask    
+ *          If an input line has fewer tokens, padding is added to match the required length.              
  * @mask  - Padding tokens should not receive valid position encodings because they do not contribute to the model’s 
  *          understanding of sequence structure(padding tokens are added to make all input sequences 
  *          uniform in length). 
@@ -270,9 +269,9 @@ try\
     {\
         /* Get the index of the token in the vocabulary. These indices originate at INDEX_ORIGINATE_AT_VALUE */\
         cc_tokenizer::string_character_traits<char>::size_type index = v(icp.get_token_by_number(i + 1), icp.get_current_line_number(), i + 1);\
-        /* If this condition is true, we are no longer strictly using post-padding; instead, padding tokens may appear */\
+        /* If this condition is false, we are no longer strictly using post-padding; instead, padding tokens may appear */\
         /* between valid tokens, leading to mixed padding. */\
-        /* TODO: Investigate whether the following statement can ever evaluate to true, and under what circumstances */\
+        /* TODO: Investigate whether the following statement can ever evaluate to be false, because under that circumstances */\
         /* mixed padding might occur. */\
         if (index != INDEX_NOT_FOUND_AT_VALUE)\
         {\
@@ -285,6 +284,14 @@ try\
             {\
                 ptr[i*we.getShape().getN() + j] = we[j];\
             }\
+        }\
+        else\
+        {\
+            /* Handling Vocabulary Lookup Failure: */\
+            /* ----------------------------------- */\
+            /* If the token is not found in the vocabulary (`index == INDEX_NOT_FOUND_AT_VALUE`), we must halt processing immediately and raise an exception. */\
+            /* It prevents mixed-padding: If we continue processing after encountering an unknown token, padding tokens may be inserted between valid tokens instead of at the end, violating  the post-padding strategy. */\
+            throw ala_exception("BUILD_INPUT_SEQUENCE_FOR_LINE_BATCH_SIZE() Error: Encountered a token that is not present in the vocabulary. This should never happen if the inputs are within the expected range. Potential cause: Vocabulary is incomplete or incorrectly loaded.");\
         }\
     }\
 }\
