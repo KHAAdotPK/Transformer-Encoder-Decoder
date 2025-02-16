@@ -66,9 +66,38 @@ class Model
          * Note: The Vocabulary object uses internal indexing that starts at INDEX_ORIGINATES_AT_VALUE.
          *       In contrast, word embeddings use zero-based indexing (starting at 0).
          */    
-        void buildInputSequence(void) throw (ala_exception)
+        void buildInputSequence(cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>& icp, CORPUS& iv, Collective<t>& is, Collective<t>& mask, Collective<t>& W1) throw (ala_exception)
         {
+            for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < icp.get_total_number_of_tokens(); i++)
+            {
+                /* Get the index of the token in the vocabulary. These indices originate at INDEX_ORIGINATE_AT_VALUE */
+                cc_tokenizer::string_character_traits<char>::size_type index = iv(icp.get_token_by_number(i + 1), icp.get_current_line_number(), i + 1);
 
+                /* If this condition is false, we are no longer strictly using post-padding; instead, padding tokens may appear */
+                /* between valid tokens, leading to mixed padding. */
+                /* TODO: Investigate whether the following statement can ever evaluate to be false, because under that circumstances */
+                /* mixed padding might occur. */
+                if (index != INDEX_NOT_FOUND_AT_VALUE)
+                {
+                    /* Marking real tokens with a valid mask value */
+                    mask[i] = DEFAULT_VALID_WORD_VECTOR_MASK_VALUE;
+            
+                    /* we, Word Embedding */
+                    Collective<t> we = W1.slice((index - INDEX_ORIGINATES_AT_VALUE)*W1.getShape().getNumberOfColumns(), W1.getShape().getNumberOfColumns());
+                    for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < we.getShape().getN(); j++)
+                    {
+                        is[i*we.getShape().getN() + j] = we[j];
+                    }
+                }
+                else
+                {
+                    /* Handling Vocabulary Lookup Failure: */
+                    /* ----------------------------------- */
+                    /* If the token is not found in the vocabulary (`index == INDEX_NOT_FOUND_AT_VALUE`), we must halt processing immediately and raise an exception. */
+                    /* It prevents mixed-padding: If we continue processing after encountering an unknown token, padding tokens may be inserted between valid tokens instead of at the end, violating  the post-padding strategy. */
+                    throw ala_exception("BUILD_INPUT_SEQUENCE_FOR_LINE_BATCH_SIZE() Error: Encountered a token that is not present in the vocabulary. This should never happen if the inputs are within the expected range. Potential cause: Vocabulary is incomplete or incorrectly loaded.");
+                }
+            }
         }   
     
         /*
@@ -98,25 +127,63 @@ class Model
                     /* maximum number of tokens per line */
                     cc_tokenizer::string_character_traits<char>::size_type mntpl = icp.max_sequence_length();
 
-                    for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < es; i++)
-                    {
-                        if (v)
-                        {                        
-                            std::cout<< "Epoch " << (i + 1) << ", batch size set to a single line and total number of lines in input vocabulary is " << icp.get_total_number_of_lines()<< " and total number of lines in target vocabulary is " << tcp.get_total_number_of_lines() << std::endl;
-                        }
+                    t* ptr = NULL;
+                    Collective<t> mask;
 
-                        for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < iv.get_number_of_lines(); j++)
+                    try
+                    {   
+                        ptr = cc_tokenizer::allocator<t>().allocate(mntpl*W1.getShape().getNumberOfColumns());
+
+                        memset (ptr, 0, sizeof(t)*(mntpl*W1.getShape().getNumberOfColumns()));
+                        is = Collective<t>{ptr, DIMENSIONS{W1.getShape().getNumberOfColumns(), mntpl, NULL, NULL}};
+
+                        ptr = cc_tokenizer::allocator<t>().allocate(mntpl);
+
+                        memset(ptr, 0, sizeof(t)*mntpl);
+                        mask = Collective<t>{ptr, DIMENSIONS{mntpl, 1, NULL, NULL}};
+
+                        for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < es; i++)
                         {
-                            icp.get_line_by_number(j + 1);
-                            tcp.get_line_by_number(j + 1);
-
                             if (v)
-                            {
-                                std::cout << "Status of Forward Pass " << (j + 1) << ", input tokens# "<< icp.get_total_number_of_tokens() << ", target tokens# "<< tcp.get_total_number_of_tokens() << std::endl;
+                            {                        
+                                std::cout<< "Epoch " << (i + 1) << ", batch size set to a single line and total number of lines in input vocabulary is " << icp.get_total_number_of_lines()<< " and total number of lines in target vocabulary is " << tcp.get_total_number_of_lines() << std::endl;
                             }
 
-                            buildInputSequence();
+                            for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < iv.get_number_of_lines(); j++)
+                            {
+                                icp.get_line_by_number(j + 1);
+                                tcp.get_line_by_number(j + 1);
+
+                                if (v)
+                                {
+                                    std::cout << "Status of Forward Pass " << (j + 1) << ", input tokens# "<< icp.get_total_number_of_tokens() << ", target tokens# "<< tcp.get_total_number_of_tokens() << std::endl;
+                                }
+
+                                buildInputSequence(icp, iv, is, mask, W1);
+
+                                for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < is.getShape().getN(); k++)
+                                {
+                                    is[k] = 0;
+                                }
+
+                                for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < mask.getShape().getN(); k++)
+                                {
+                                    mask[k] = 0;
+                                }
+                            }
                         }
+                    }
+                    catch (std::bad_alloc& e)
+                    {
+                        throw ala_exception(cc_tokenizer::String<char>("Model::startTrining() Error: ") + cc_tokenizer::String<char>(e.what()));
+                    }
+                    catch (std::length_error& e)
+                    {
+                        throw ala_exception(cc_tokenizer::String<char>("Model::startTrining() Error: ") + cc_tokenizer::String<char>(e.what()));\
+                    }
+                    catch (ala_exception& e)
+                    {
+                        throw ala_exception(cc_tokenizer::String<char>("Model::startTrining() -> ") + cc_tokenizer::String<char>(e.what()));                     
                     }
                 }    
                 break;
