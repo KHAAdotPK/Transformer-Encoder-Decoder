@@ -8,6 +8,126 @@
 #ifndef NLP_ENCODER_DECODER_TRANSFORMER_MODEL_HH
 #define NLP_ENCODER_DECODER_TRANSFORMER_MODEL_HH
 
+enum BatchType
+{
+    SINGLE_LINE,
+    PARAGRAPH,
+    PAGE
+};
+
+template <typename t = double>
+class Model 
+{
+    public:
+
+        /*
+         * Builds an input sequence for a batch of tokens from a line of text.
+         * 
+         * This macro allocates memory and processes tokens to create an input sequence
+         * using pre-trained word embeddings.
+         * 
+         * Parameters:
+         * @is    - An output parameter of type Collective<t> that will store the final input sequence.
+         * @v     - Vocabulary object that maps tokens to indices
+         * @icp   - Input CSV parser object representing the input corpus, which provides token-related information.
+         * @mntpl - Each input sequence is padded to ensure uniform length across variable-length sequences per line. 
+         *          The value of maximum number of tokens/sequences per line (mntpl) determines the size of all input sequences. 
+         *          If an input line has fewer tokens, padding is added to match the required length.              
+         * @mask  - Padding tokens should not receive valid position encodings because they do not contribute to the model’s 
+         *          understanding of sequence structure(padding tokens are added to make all input sequences 
+         *          uniform in length). 
+         *          Since positional encodings influence attention weights, allowing padding tokens to have meaningful encodings
+         *          might lead to misleading attention patterns.
+         *          You need a mask that differentiates real tokens from padding tokens. The mask should have:
+         *          Value (DEFAULT_VALID_WORD_VECTOR_MASK_VALUE) for real tokens (to keep their positional encoding).
+         *          Value (DEFAULT_PADDING_WORD_VECTOR_VALUE) for padding tokens (to zero out their positional encoding).
+         * @t     - The data type of embeddings (e.g., float, double).
+         * @w1    - Matrix of pre-trained word embeddings where each row represents a word vector.
+         * 
+         * Implementation:
+         * 1. Allocates memory for all tokens * embedding dimension in the current line
+         * 2. For each token in the line:
+         *    - Looks up the token's index in the vocabulary
+         *    - If found, copies the corresponding word embedding from w1
+         *    - Each word embedding is a row vector from the w1 matrix
+         * 3. Mask Setting in this Macro:
+         *    - Memory is allocated for the mask (`ptr_mask`), with all values initially set to `DEFAULT_PADDING_WORD_VECTOR_VALUE`.
+         *    - Inside the loop, when a valid token is found in the vocabulary, its corresponding mask index is set to `DEFAULT_VALID_WORD_VECTOR_MASK` (typically 1).
+         *    - Padding tokens remain with their initial value (`DEFAULT_PADDING_WORD_VECTOR_VALUE`, typically 0), ensuring they are ignored in position encoding calculations.
+         *    - Finally, the mask is wrapped in a `Collective<t>` object for use in downstream processing.
+         *    (PLEASE NOTE:-  Implementation can ignore trailing padding, example: If all sequences are mntpl=10, but only the first 7 positions contain valid tokens, you can use sequence_length=7 instead of a mask.) 
+         * 
+         * Error Handling:
+         * - Handles memory allocation failures (bad_alloc)
+         * - Handles length errors
+         * - Handles custom ala_exceptions
+         * - All errors are propagated with additional context
+         *  
+         * Note: The Vocabulary object uses internal indexing that starts at INDEX_ORIGINATES_AT_VALUE.
+         *       In contrast, word embeddings use zero-based indexing (starting at 0).
+         */    
+        void buildInputSequence(void) throw (ala_exception)
+        {
+
+        }   
+    
+        /*
+            @es, epochs
+            @iv, input sequence vocabulary
+            @tv, target sequence vocabulary
+            @icp, input csv parser
+            @tcp, target csv parser
+            @is, input sequence
+            @ts, target sequence
+            @p, position
+            @pe, position encoding
+            @dm, dimensions of the model(d_model)
+            @dt, division term
+            @ei, encoder input
+            @di, decoder input
+            @w1, vector of trained word embeddings, used as an input sequence
+            @v, be verbose when true
+            @batch,                                                                                                                                                             
+         */
+        void startTraining(cc_tokenizer::string_character_traits<char>::size_type es, CORPUS& iv, CORPUS& tv, cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>& icp, cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>& tcp, Collective<t>& is, Collective<t>& ts, Collective<t>& p, Collective<t>& pe, cc_tokenizer::string_character_traits<char>::size_type dm, Collective<t>& dt, Collective<t>& ei, Collective<t>& di, Collective<t>& W1, bool v = false, BatchType batch = SINGLE_LINE) throw (ala_exception)
+        {
+            switch (batch)
+            {
+                case SINGLE_LINE:
+                {
+                    /* maximum number of tokens per line */
+                    cc_tokenizer::string_character_traits<char>::size_type mntpl = icp.max_sequence_length();
+
+                    for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < es; i++)
+                    {
+                        if (v)
+                        {                        
+                            std::cout<< "Epoch " << (i + 1) << ", batch size set to a single line and total number of lines in input vocabulary is " << icp.get_total_number_of_lines()<< " and total number of lines in target vocabulary is " << tcp.get_total_number_of_lines() << std::endl;
+                        }
+
+                        for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < iv.get_number_of_lines(); j++)
+                        {
+                            icp.get_line_by_number(j + 1);
+                            tcp.get_line_by_number(j + 1);
+
+                            if (v)
+                            {
+                                std::cout << "Status of Forward Pass " << (j + 1) << ", input tokens# "<< icp.get_total_number_of_tokens() << ", target tokens# "<< tcp.get_total_number_of_tokens() << std::endl;
+                            }
+
+                            buildInputSequence();
+                        }
+                    }
+                }    
+                break;
+
+                default:
+                break;
+            }
+        }
+};
+
+
 /*
     The softmax function is a mathematical transformation that converts a vector of real numbers 
     into a probability distribution. This ensures:
@@ -264,7 +384,7 @@ try\
     /* followed by padding. This means that all padding appears at the end, not in the middle or mixed with real tokens. */\
     ptr_mask = cc_tokenizer::allocator<t>().allocate(mntpl);\
     memset(ptr, (t)DEFAULT_PADDING_WORD_VECTOR_VALUE, mntpl*w1.getShape().getNumberOfColumns());\
-    memset(ptr_mask, (t)DEFAULT_PADDING_WORD_VECTOR_VALUE, mntpl);\
+    memset(ptr_mask, DEFAULT_PADDING_WORD_VECTOR_VALUE, mntpl);\
     for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < icp.get_total_number_of_tokens(); i++)\
     {\
         /* Get the index of the token in the vocabulary. These indices originate at INDEX_ORIGINATE_AT_VALUE */\
@@ -276,7 +396,7 @@ try\
         if (index != INDEX_NOT_FOUND_AT_VALUE)\
         {\
             /* Marking real tokens with a valid mask value */\
-            ptr_mask[i] = (t)DEFAULT_VALID_WORD_VECTOR_MASK_VALUE;\
+            ptr_mask[i] = DEFAULT_VALID_WORD_VECTOR_MASK_VALUE;\
             \
             /* we, Word Embedding */\
             Collective<t> we = w1.slice((index - INDEX_ORIGINATES_AT_VALUE)*w1.getShape().getNumberOfColumns(), w1.getShape().getNumberOfColumns());\
@@ -315,7 +435,7 @@ catch (ala_exception& e)\
 /* In future iterations, enhance code consistency by ensuring similar semantics share consistent data types.*/\
 is = Collective<t>{ptr, DIMENSIONS{w1.getShape().getNumberOfColumns(), /*static_cast<cc_tokenizer::string_character_traits<char>::size_type>(icp.get_total_number_of_tokens())*/ mntpl, NULL, NULL}};\
 /* Assigning the mask to ensure padding tokens (0) do not receive position encodings */\
-mask = Collective<t>{ptr_mask, DIMENSIONS{1, mntpl, NULL, NULL}};\
+mask = Collective<t>{ptr_mask, DIMENSIONS{mntpl, 1, NULL, NULL}};\
 }\
 
 /*
@@ -416,6 +536,13 @@ mask = Collective<t>{ptr_mask, DIMENSIONS{1, mntpl, NULL, NULL}};\
  * @param dt Division Term, an output parameter of type `Collective<t>` representing the scaling term.
  * @param dm The model's embedding dimension.
  * @param pe An output parameter of type `Collective<t>` that stores the final position encodings.
+ * @param mntpl Each input sequence is padded to ensure uniform length across variable-length sequences per line. 
+ *        The value of maximum number of tokens/sequences per line (mntpl) determines the size of all input sequences. 
+ *        If an input line has fewer tokens, padding is added to match the required length. 
+ * @param mask a mask that differentiates real tokens from padding tokens. 
+ *        Padding tokens should not receive valid position encodings because they do not contribute to the model’s 
+ *        understanding of sequence structure(padding tokens are added to make all input sequences 
+ *        uniform in length).
  * @param t The data type for computations (e.g., float, double).
  *
  * Functionality:
@@ -425,14 +552,28 @@ mask = Collective<t>{ptr_mask, DIMENSIONS{1, mntpl, NULL, NULL}};\
  * - Applies sine functions to compute position encoding values.
  * - Fills even and odd indices separately using helper macros.
  */
-#define BUILD_POSITION_ENCODING_FOR_LINE_BATCH_SIZE(p, is, dt, dm, pe, t) {\
+/*
+           m    n
+    p = mntpl x 1
+    mask = 1 x mntpl
+           n    p
+           
+    m x p      
+           
+    p * mask   
+ */
+#define BUILD_POSITION_ENCODING_FOR_LINE_BATCH_SIZE(p, is, dt, dm, pe, mntpl, mask, t) {\
 try\
 {\
     /* Generate position indices: range from 0 to input sequence length(exclusive), length is the number of tokens in the line */\
-    p = Collective<t>{Numcy::arange<t, t>((t)0.0, (t)is.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), (t)1.0, DIMENSIONS{1, /*is.getShape().getNumberOfColumns()*/ is.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), NULL, NULL}),  DIMENSIONS{1, is.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), NULL, NULL}};\
+    p = Collective<t>{Numcy::arange<t, t>((t)0.0, (t)/*is.getShape().getDimensionsOfArray().getNumberOfInnerArrays()*/ mntpl, (t)1.0, DIMENSIONS{1, /*is.getShape().getDimensionsOfArray().getNumberOfInnerArrays()*/ mntpl, NULL, NULL}),  DIMENSIONS{1, /*is.getShape().getDimensionsOfArray().getNumberOfInnerArrays()*/ mntpl, NULL, NULL}};\
+    \
         std::cout<< "p = " << p.getShape().getNumberOfColumns() << " - " << p.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
+        std::cout<< "mask = " << mask.getShape().getNumberOfColumns() << " - " << mask.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
+    p = p * mask;\
+        std::cout<< "p * mask = " << p.getShape().getNumberOfColumns() << " - " << p.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
     /* Compute scaling term dt using an exponential function */\
-    dt = Collective<t>{Numcy::exp<t>(Numcy::arange<t, t>((t)0.0, (t)dm, (t)2.0, DIMENSIONS{dm, 1, NULL, NULL}), dm), DIMENSIONS{dm, 1, NULL, NULL}};\
+    dt = Collective<t>{Numcy::exp<t>(Numcy::arange<t, t>((t)0.0, (t)dm, (t)2.0, DIMENSIONS{dm, /*1*/ mntpl, NULL, NULL}), dm), DIMENSIONS{dm, /*1*/ mntpl, NULL, NULL}};\
     /* Scale dt by a predefined scaling factor */ \
     dt = dt * (t)(SCALING_FACTOR(SCALING_FACTOR_CONSTANT, dm));\
     /* Initialize position encoding tensor with zeros */\
@@ -440,16 +581,68 @@ try\
         /* Please read the comments */\
         std::cout<< "dt = " << dt.getShape().getNumberOfColumns() << " - " << dt.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
     /* Compute sine-transformed position encodings */\
+    /*p * dt;*/\
     Collective<t> product = Numcy::sin<t>(p * dt);\
         std::cout<< "product = " << product.getShape().getNumberOfColumns() << " - " << product.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
     /* Fill even and odd indices of position encoding */ \
-    FILL_EVEN_INDICES_OF_POSITION_ENCODING(pe,  product);\
-    FILL_ODD_INDICES_OF_POSITION_ENCODING(pe, product);\
+    /*FILL_EVEN_INDICES_OF_POSITION_ENCODING(pe,  product);*/\
+    /*FILL_ODD_INDICES_OF_POSITION_ENCODING(pe, product);*/\
 }\
 catch (ala_exception& e)\
 {\
     throw ala_exception(cc_tokenizer::String<char>("BUILD_POSITION_ENCODING_FOR_LINE_BATCH_SIZE() -> ") + cc_tokenizer::String<char>(e.what()));\
 }\
+}\
+
+#define NEW_BUILD_POSITION_ENCODING_FOR_LINE_BATCH_SIZE(p, is, dt, dm, pe, mntpl, mask, t)\
+{\
+    try\
+    {\
+        /* Generate position indices: range from 0 to input sequence length(exclusive), length is the number of tokens in the line */\
+        p = Collective<t>{Numcy::arange<t, t>((t)0.0, (t)mntpl, (t)1.0, DIMENSIONS{1, mntpl, NULL, NULL}),  DIMENSIONS{1, mntpl, NULL, NULL}};\
+            std::cout<< "p = " << p.getShape().getNumberOfColumns() << " - " << p.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
+            std::cout<< "mask = " << mask.getShape().getNumberOfColumns() << " - " << mask.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
+        std::cout<< "P output = ";\
+        for (int i = 0; i < p.getShape().getN(); i++)\
+        {\
+            std::cout<< p[i] << ", ";\
+        }\
+        std::cout<< std::endl;\
+        std::cout<< "mask output = ";\
+        for (int i = 0; i < mask.getShape().getN(); i++)\
+        {\
+            std::cout<< mask[i] << ", ";\
+        }\
+        std::cout<< std::endl;\
+        /* Apply mask: Set position indices to zero where padding tokens are present */\
+        p = p * mask;\
+            std::cout<< "p * mask = " << p.getShape().getNumberOfColumns() << " - " << p.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
+        std::cout<< "p*mask output = ";\
+        for (int i = 0; i < p.getShape().getN(); i++)\
+        {\
+            std::cout<< p[i] << ", ";\
+        }\
+        std::cout<< std::endl;\
+        /* Compute scaling term dt using an exponential function */\
+        Collective<t> temp = Collective<t>{Numcy::arange<t, t>((t)0.0, (t)dm, (t)2.0, DIMENSIONS{dm, mntpl, NULL, NULL}), DIMENSIONS{dm, mntpl, NULL, NULL}};\
+        dt = Numcy::exp<t>(temp);\
+        /*dt = Collective<t>{Numcy::exp<t>(Numcy::arange<t, t>((t)0.0, (t)dm, (t)2.0, DIMENSIONS{dm, mntpl, NULL, NULL}), dm), DIMENSIONS{dm, mntpl, NULL, NULL}};*/\
+            std::cout<< "---> dt = " << dt.getShape().getNumberOfColumns() << " - " << dt.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
+        /* Scale dt by a predefined scaling factor */\
+        dt = dt * (t)SCALING_FACTOR(SCALING_FACTOR_CONSTANT, dm);\
+            std::cout<< "dt = " << dt.getShape().getNumberOfColumns() << " - " << dt.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
+        Collective<t> product = Numcy::sin<t>(p * dt);\
+            std::cout<< "product = " << product.getShape().getNumberOfColumns() << " - " << product.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
+        /* Initialize position encoding tensor with zeros */\
+        pe = Numcy::zeros<t>(DIMENSIONS{dm, mntpl, NULL, NULL});\
+        /* Fill even and odd indices of position encoding */\
+        FILL_EVEN_INDICES_OF_POSITION_ENCODING(pe, product);\
+        FILL_ODD_INDICES_OF_POSITION_ENCODING(pe, product);\
+    }\
+    catch (ala_exception& e)\
+    {\
+        throw ala_exception(cc_tokenizer::String<char>("BUILD_POSITION_ENCODING_FOR_LINE_BATCH_SIZE() -> ") + cc_tokenizer::String<char>(e.what()));\
+    }\
 }\
 
 /*
@@ -526,7 +719,7 @@ catch (ala_exception& e)\
                 std::cout<< "is = " << is.getShape().getNumberOfColumns() << " - " << is.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
                 BUILD_TARGET_SEQUENCE_FOR_LINE_BATCH_SIZE(ts, tv, tcp, t);\
                 std::cout<< "ts = " << ts.getShape().getNumberOfColumns() << " - " << ts.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
-                BUILD_POSITION_ENCODING_FOR_LINE_BATCH_SIZE(p, is, dt, dm, pe, t);\
+                NEW_BUILD_POSITION_ENCODING_FOR_LINE_BATCH_SIZE(p, is, dt, dm, pe, mntpl, mask, t);\
                 std::cout<< "pe = " << pe.getShape().getNumberOfColumns() << " - " << pe.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;\
                 /* Encoder Input */\
                 /*  pe = nx64, is = nx16 */\

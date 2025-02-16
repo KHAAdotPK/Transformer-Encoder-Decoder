@@ -18,6 +18,9 @@ int main(int argc, char* argv[])
     ARG arg_bs, arg_bs_line, arg_bs_para, arg_corpus, arg_dmodel, arg_epoch, arg_help, arg_verbose, arg_w1;
 
     cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char> argsv_parser(cc_tokenizer::String<char>(COMMAND));
+
+    //  std::cout<< "-> " << argsv_parser.max_sequence_length() << std::endl;
+    //  return 0;
             
     if (argc < 2)
     {        
@@ -130,7 +133,7 @@ int main(int argc, char* argv[])
 
     Collective<double> decoderInput;
     Collective<double> divisionTerm;
-    Collective<double> encoderInput;
+    Collective<double> encoderInput;    
     Collective<double> inputSequence;
     Collective<double> position;
     Collective<double> positionEncoding;
@@ -165,13 +168,17 @@ int main(int argc, char* argv[])
     {
         dimensionsOfTheModelHyperparameter = DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER;
     }
+
+    Model<double> model;
            
     try {
         if (arg_epoch.argc)
         {
             if (arg_bs_line.i) // Batch size is line
             {                
-                TRAINING_LOOP_LINE_BATCH_SIZE(input_csv_parser, target_csv_parser, encoderInput, decoderInput, dimensionsOfTheModelHyperparameter, std::atoi(argv[arg_epoch.i + 1]), input_sequence_vocab, target_sequence_vocab, position, divisionTerm, positionEncoding, inputSequence, targetSequence, double, arg_verbose.i ? MAKE_IT_VERBOSE_MAIN_HH : !MAKE_IT_VERBOSE_MAIN_HH, W1);
+                //TRAINING_LOOP_LINE_BATCH_SIZE(input_csv_parser, target_csv_parser, encoderInput, decoderInput, dimensionsOfTheModelHyperparameter, std::atoi(argv[arg_epoch.i + 1]), input_sequence_vocab, target_sequence_vocab, position, divisionTerm, positionEncoding, inputSequence, targetSequence, double, arg_verbose.i ? MAKE_IT_VERBOSE_MAIN_HH : !MAKE_IT_VERBOSE_MAIN_HH, W1);
+
+                model.startTraining(std::atoi(argv[arg_epoch.i + 1]), input_sequence_vocab, target_sequence_vocab, input_csv_parser, target_csv_parser, inputSequence, targetSequence, position,  positionEncoding, dimensionsOfTheModelHyperparameter, divisionTerm, encoderInput, decoderInput, W1, arg_verbose.i ? MAKE_IT_VERBOSE_MAIN_HH : !MAKE_IT_VERBOSE_MAIN_HH);
             }
             else if (arg_bs_para.i) // Batch size is para
             {
@@ -184,7 +191,9 @@ int main(int argc, char* argv[])
         {
             if (arg_bs_line.i) // Batch size is line
             {             
-                TRAINING_LOOP_LINE_BATCH_SIZE(input_csv_parser, target_csv_parser, encoderInput, decoderInput, dimensionsOfTheModelHyperparameter, DEFAULT_EPOCH_HYPERPARAMETER, input_sequence_vocab, target_sequence_vocab, position, divisionTerm, positionEncoding, inputSequence, targetSequence, double, arg_verbose.i ? MAKE_IT_VERBOSE_MAIN_HH : !MAKE_IT_VERBOSE_MAIN_HH, W1);
+                //TRAINING_LOOP_LINE_BATCH_SIZE(input_csv_parser, target_csv_parser, encoderInput, decoderInput, dimensionsOfTheModelHyperparameter, DEFAULT_EPOCH_HYPERPARAMETER, input_sequence_vocab, target_sequence_vocab, position, divisionTerm, positionEncoding, inputSequence, targetSequence, double, arg_verbose.i ? MAKE_IT_VERBOSE_MAIN_HH : !MAKE_IT_VERBOSE_MAIN_HH, W1);
+
+                model.startTraining(std::atoi(argv[arg_epoch.i + 1]), input_sequence_vocab, target_sequence_vocab, input_csv_parser, target_csv_parser, inputSequence, targetSequence, position, positionEncoding, dimensionsOfTheModelHyperparameter, divisionTerm, encoderInput, decoderInput, W1, arg_verbose.i ? MAKE_IT_VERBOSE_MAIN_HH : !MAKE_IT_VERBOSE_MAIN_HH);
             }
             else if (arg_bs_para.i) // Batch size is para
             {
@@ -196,7 +205,7 @@ int main(int argc, char* argv[])
     }
     catch (ala_exception& e)
     {       
-       std::cerr << e.what() << '\n'; 
+       std::cerr << "main() -> " << e.what() << std::endl;
     }
         
     return 0;
