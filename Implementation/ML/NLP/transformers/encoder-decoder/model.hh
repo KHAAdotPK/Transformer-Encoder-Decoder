@@ -66,37 +66,62 @@ class Model
          * Note: The Vocabulary object uses internal indexing that starts at INDEX_ORIGINATES_AT_VALUE.
          *       In contrast, word embeddings use zero-based indexing (starting at 0).
          */    
-        void buildInputSequence(cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>& icp, CORPUS& iv, Collective<t>& is, Collective<t>& mask, Collective<t>& W1) throw (ala_exception)
+        void buildInputSequence(cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>& icp, CORPUS& iv, Collective<t>& is, Collective<t>& mask, Collective<t>& W1, bool v = false) throw (ala_exception)
         {
-            for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < icp.get_total_number_of_tokens(); i++)
-            {
-                /* Get the index of the token in the vocabulary. These indices originate at INDEX_ORIGINATE_AT_VALUE */
-                cc_tokenizer::string_character_traits<char>::size_type index = iv(icp.get_token_by_number(i + 1), icp.get_current_line_number(), i + 1);
+            try
+            {                           
+                for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < icp.get_total_number_of_tokens(); i++)
+                {
+                    /* Get the index of the token in the vocabulary. These indices originate at INDEX_ORIGINATE_AT_VALUE */
+                    cc_tokenizer::string_character_traits<char>::size_type index = iv(icp.get_token_by_number(i + 1), icp.get_current_line_number(), i + 1);
 
-                /* If this condition is false, we are no longer strictly using post-padding; instead, padding tokens may appear */
-                /* between valid tokens, leading to mixed padding. */
-                /* TODO: Investigate whether the following statement can ever evaluate to be false, because under that circumstances */
-                /* mixed padding might occur. */
-                if (index != INDEX_NOT_FOUND_AT_VALUE)
-                {
-                    /* Marking real tokens with a valid mask value */
-                    mask[i] = DEFAULT_VALID_WORD_VECTOR_MASK_VALUE;
-            
-                    /* we, Word Embedding */
-                    Collective<t> we = W1.slice((index - INDEX_ORIGINATES_AT_VALUE)*W1.getShape().getNumberOfColumns(), W1.getShape().getNumberOfColumns());
-                    for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < we.getShape().getN(); j++)
+                    /* If this condition is false, we are no longer strictly using post-padding; instead, padding tokens may appear */
+                    /* between valid tokens, leading to mixed padding. */
+                    /* TODO: Investigate whether the following statement can ever evaluate to be false, because under that circumstances */
+                    /* mixed padding might occur. */
+                    if (index != INDEX_NOT_FOUND_AT_VALUE)
                     {
-                        is[i*we.getShape().getN() + j] = we[j];
+                        /* Marking real tokens with a valid mask value */
+                        mask[i] = DEFAULT_VALID_WORD_VECTOR_MASK_VALUE;
+            
+                        /* we, Word Embedding */
+                        Collective<t> we = W1.slice((index - INDEX_ORIGINATES_AT_VALUE)*W1.getShape().getNumberOfColumns(), W1.getShape().getNumberOfColumns());
+                        for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < we.getShape().getN(); j++)
+                        {
+                            is[i*we.getShape().getN() + j] = we[j];
+                        }
                     }
+                    else
+                    {
+                        /* Handling Vocabulary Lookup Failure: */
+                        /* ----------------------------------- */
+                        /* If the token is not found in the vocabulary (`index == INDEX_NOT_FOUND_AT_VALUE`), we must halt processing immediately and raise an exception. */
+                        /* It prevents mixed-padding: If we continue processing after encountering an unknown token, padding tokens may be inserted between valid tokens instead of at the end, violating  the post-padding strategy. */
+                        throw ala_exception("Model::buildInputSequence Error: Encountered a token that is not present in the vocabulary. This should never happen if the inputs are within the expected range. Potential cause: Vocabulary is incomplete or incorrectly loaded.");
+                    }                
                 }
-                else
+#ifdef MAKE_THIS_MODEL_VERBOSE                   
+                for (int i = 0; i < mask.getShape().getN(); i++)
                 {
-                    /* Handling Vocabulary Lookup Failure: */
-                    /* ----------------------------------- */
-                    /* If the token is not found in the vocabulary (`index == INDEX_NOT_FOUND_AT_VALUE`), we must halt processing immediately and raise an exception. */
-                    /* It prevents mixed-padding: If we continue processing after encountering an unknown token, padding tokens may be inserted between valid tokens instead of at the end, violating  the post-padding strategy. */
-                    throw ala_exception("BUILD_INPUT_SEQUENCE_FOR_LINE_BATCH_SIZE() Error: Encountered a token that is not present in the vocabulary. This should never happen if the inputs are within the expected range. Potential cause: Vocabulary is incomplete or incorrectly loaded.");
+                    std::cout<< mask[i] << ", ";
                 }
+                std::cout<< icp.get_total_number_of_tokens() << std::endl;
+
+                for (int i = 0; i < mask.getShape().getN(); i++)
+                {
+                    std::cout<< "--> ";
+                    for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < is.getShape().getNumberOfColumns(); j++)
+                    {
+                        std::cout<< is[i*W1.getShape().getNumberOfColumns() + j] << ", ";
+                    }
+
+                    std::cout<< std::endl;
+                }
+#endif                
+            }
+            catch (ala_exception& e)
+            {
+                throw ala_exception(cc_tokenizer::String<char>("Model::buildInputSequence() -> ") + cc_tokenizer::String<char>(e.what()));   
             }
         }   
     
@@ -159,7 +184,7 @@ class Model
                                     std::cout << "Status of Forward Pass " << (j + 1) << ", input tokens# "<< icp.get_total_number_of_tokens() << ", target tokens# "<< tcp.get_total_number_of_tokens() << std::endl;
                                 }
 
-                                buildInputSequence(icp, iv, is, mask, W1);
+                                buildInputSequence(icp, iv, is, mask, W1, true);
 
                                 for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < is.getShape().getN(); k++)
                                 {
