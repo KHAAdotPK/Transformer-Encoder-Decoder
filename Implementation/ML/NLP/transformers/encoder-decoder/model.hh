@@ -21,6 +21,11 @@ class Model
     public:
 
         /*
+         * --------------------------------------------
+         * | BUILD INPUT SEQUENCE FOR ANY BATCH SIZE |
+         * --------------------------------------------
+         */   
+        /*
          * Builds an input sequence for a batch of tokens from a line of text.
          * 
          * This macro allocates memory and processes tokens to create an input sequence
@@ -97,33 +102,124 @@ class Model
                         /* ----------------------------------- */
                         /* If the token is not found in the vocabulary (`index == INDEX_NOT_FOUND_AT_VALUE`), we must halt processing immediately and raise an exception. */
                         /* It prevents mixed-padding: If we continue processing after encountering an unknown token, padding tokens may be inserted between valid tokens instead of at the end, violating  the post-padding strategy. */
-                        throw ala_exception("Model::buildInputSequence Error: Encountered a token that is not present in the vocabulary. This should never happen if the inputs are within the expected range. Potential cause: Vocabulary is incomplete or incorrectly loaded.");
+                        throw ala_exception("Model::buildInputSequence() Error: Encountered a token that is not present in the vocabulary. This should never happen if the inputs are within the expected range. Potential cause: Vocabulary is incomplete or incorrectly loaded.");
                     }                
                 }
-#ifdef MAKE_THIS_MODEL_VERBOSE                   
-                for (int i = 0; i < mask.getShape().getN(); i++)
-                {
-                    std::cout<< mask[i] << ", ";
-                }
-                std::cout<< icp.get_total_number_of_tokens() << std::endl;
-
-                for (int i = 0; i < mask.getShape().getN(); i++)
-                {
-                    std::cout<< "--> ";
-                    for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < is.getShape().getNumberOfColumns(); j++)
+#ifdef MAKE_THIS_MODEL_VERBOSE 
+                if (v)
+                {   
+                    std::cout<< "::: DEBUG DATA -: (Model::buildInputSequence()) :- :::"  << std::endl;
+                    std::cout<< "mask --> ";              
+                    for (int i = 0; i < mask.getShape().getN(); i++)
                     {
-                        std::cout<< is[i*W1.getShape().getNumberOfColumns() + j] << ", ";
+                        std::cout<< mask[i] << ", ";
                     }
+                    std::cout<< " tokens#" << icp.get_total_number_of_tokens() << std::endl;
+                    std::cout<< "Input-Sequence" << std::endl;
+                    for (int i = 0; i < mask.getShape().getN(); i++)
+                    {
+                        std::cout<< "--> ";
+                        for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < is.getShape().getNumberOfColumns(); j++)
+                        {
+                            std::cout<< is[i*W1.getShape().getNumberOfColumns() + j] << ", ";
+                        }
 
-                    std::cout<< std::endl;
-                }
+                        std::cout<< std::endl;
+                    }
+                }    
 #endif                
             }
             catch (ala_exception& e)
             {
                 throw ala_exception(cc_tokenizer::String<char>("Model::buildInputSequence() -> ") + cc_tokenizer::String<char>(e.what()));   
             }
-        }   
+        }
+
+        /*
+         * --------------------------------------------
+         * | BUILD TARGET SEQUENCE FOR ANY BATCH SIZE |
+         * --------------------------------------------
+         */       
+        /*
+            Target Sequence:
+            Token Indices: For the target sequence, you typically use token indices (integers) from the vocabulary instead of pre-trained embeddings.
+            Here's why:
+            - Task-Specific Learning: The target sequence is usually used for tasks like machine translation,
+            text generation, or sequence prediction. The model learns to predict the next token (or sequence of tokens)
+            based on the input sequence and its own internal representations.
+            - Embedding Layer in Decoder: The decoder has its own embedding layer, 
+            which learns to map token indices to dense vectors during training.
+            This embedding layer is specific to the target vocabulary and is optimized for the task at hand. 
+            - Output Layer: The decoder's output layer predicts the probability distribution over the target vocabulary.
+            This is done using a softmax function, and the model is trained to minimize the cross-entropy loss between
+            the predicted and actual token indices.   
+         */
+        /* Temporary Solution to Address Compile-Time Error ("narrow conversion") */
+        /* ---------------------------------------------------------------------- */ 
+        /* If you are confident that the 'int_type' value can be safely accommodated within 'size_t' without loss of data,
+         * you can use a 'static_cast' to perform the conversion. However, exercise caution when using this approach.
+        /* TODO: Eliminate the Need for the Following "Narrow Conversion" */
+        /* 
+         * The return type of 'get_total_number_of_tokens()' is 'cc_tokenizer::string_character_traits<char>::int_type',
+         * whereas the type of 'DIMENSIONS::columns' is 'cc_tokenizer::string_character_traits<char>::size_type'.
+         * Converting a signed integer to its unsigned equivalent is considered a "narrow conversion,"
+         * which may lead to unexpected behavior. It is advisable to avoid such conversions whenever possible.
+         *
+         * In future iterations of the codebase, consider revising the design of the parser and related entities to ensure
+         * that values of similar semantics share consistent data types. This will enhance code safety and maintainability.
+         */
+        /*
+            @tcp, An object representing the target corpus, which provides token-related information.
+            @tv, A callable object that maps tokens to their corresponding vocabulary indices.
+            @ts, An output parameter of type `Collective<t>` that will store the final target sequence.            
+            @v, Display output, verbosly.
+         */        
+        void buildTragetSequence(cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>& tcp, CORPUS& tv, Collective<t>& ts, bool verbose = false) throw (ala_exception)
+        {
+            ts.~Collective();
+
+            t *ptr = NULL;
+            try
+            {
+                ptr = cc_tokenizer::allocator<t>().allocate(tcp.get_total_number_of_tokens());\
+            }
+            catch (std::bad_alloc& e)
+            {
+                throw ala_exception(cc_tokenizer::String<char>("Model::buildTragetSquence() Error: ") + cc_tokenizer::String<char>(e.what()));\
+            }
+            catch (std::length_error& e)
+            {
+                throw ala_exception(cc_tokenizer::String<char>("Model::buildTargetSequence() Error: ") + cc_tokenizer::String<char>(e.what()));\
+            }
+            for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < tcp.get_total_number_of_tokens(); i++)
+            {
+                /* Get the index of the token in the vocabulary. These indices originate at INDEX_ORIGINATE_AT_VALUE */
+                cc_tokenizer::string_character_traits<char>::size_type index = tv(tcp.get_token_by_number(i + 1));
+
+                if (index != INDEX_NOT_FOUND_AT_VALUE)
+                {                    
+                    ptr[i] = tv(tcp.get_token_by_number(i + 1));
+                }
+                else
+                {
+                    /*
+                        Handling Vocabulary Lookup Failure: 
+                        -----------------------------------
+                        If the token is not found in the vocabulary (`index == INDEX_NOT_FOUND_AT_VALUE`), we must halt processing immediately and raise an exception.                        
+                     */                         
+                    throw ala_exception("Model::buildTargetSequence() Error: Encountered a token that is not present in the vocabulary. This should never happen if the inputs are within the expected range. Potential cause: Vocabulary is incomplete or incorrectly loaded."); 
+                }
+            }
+
+            /* 
+                TODO: Eliminate the Need for Narrow Conversion 
+                The return type of 'get_total_number_of_tokens()' is 'cc_tokenizer::string_character_traits<char>::int_type',
+                while 'DIMENSIONS::columns' is 'cc_tokenizer::string_character_traits<char>::size_type'. 
+                Converting a signed to unsigned is a narrow conversion; it's recommended to avoid such conversions. 
+                In future iterations, enhance code consistency by ensuring similar semantics share consistent data types.
+             */        
+            new (&ts) Collective<t>{ptr, DIMENSIONS{static_cast<cc_tokenizer::string_character_traits<char>::size_type>(tcp.get_total_number_of_tokens()), 1, NULL, NULL}};
+        }
     
         /*
             @es, epochs
@@ -149,7 +245,7 @@ class Model
             {
                 case SINGLE_LINE:
                 {
-                    /* maximum number of tokens per line */
+                    /* maximum number of tokens per line(number of tokens in the largest line of input text) */
                     cc_tokenizer::string_character_traits<char>::size_type mntpl = icp.max_sequence_length();
 
                     t* ptr = NULL;
@@ -157,6 +253,13 @@ class Model
 
                     try
                     {   
+                        /* 
+                             Post-Padding instead of Pre-Padding or Mixed-Padding 
+                            ------------------------------------------------------
+                            Here, using post-padding by allocating memory for a fixed-length sequence (mntpl) and filling it with real tokens first, 
+                            followed by padding. This means that all padding appears at the end, not in the middle or mixed with real tokens. 
+                         */
+
                         ptr = cc_tokenizer::allocator<t>().allocate(mntpl*W1.getShape().getNumberOfColumns());
 
                         memset (ptr, 0, sizeof(t)*(mntpl*W1.getShape().getNumberOfColumns()));
@@ -184,13 +287,26 @@ class Model
                                     std::cout << "Status of Forward Pass " << (j + 1) << ", input tokens# "<< icp.get_total_number_of_tokens() << ", target tokens# "<< tcp.get_total_number_of_tokens() << std::endl;
                                 }
 
-                                buildInputSequence(icp, iv, is, mask, W1, true);
+                                buildInputSequence(icp, iv, is, mask, W1, v);
+                                buildTragetSequence(tcp, tv, ts, v);
+#ifdef MAKE_THIS_MODEL_VERBOSE 
+                                if (v)
+                                {
+                                    std::cout<< "::: DEBUG DATA -: (Model::startTraining() for Target Sequence) :- :::"  << std::endl;
 
+                                    for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < ts.getShape().getN(); k++)
+                                    {
+                                        std::cout<< ts[k] << " ";
+                                    }
+
+                                    std::cout<< std::endl;
+                                }
+#endif
+                                /* Reinitialize, input sequence and input sequence mask */                                
                                 for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < is.getShape().getN(); k++)
                                 {
                                     is[k] = 0;
                                 }
-
                                 for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < mask.getShape().getN(); k++)
                                 {
                                     mask[k] = 0;
@@ -218,7 +334,6 @@ class Model
             }
         }
 };
-
 
 /*
     The softmax function is a mathematical transformation that converts a vector of real numbers 
