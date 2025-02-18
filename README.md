@@ -109,6 +109,31 @@ usage/
 | │ ├── w2p.dat
 ```
 
+### Build and Run this model
+The batch script (`RUN.cmd`) manages both building and running the program with customizable parameters.
+
+The script accepts the following command-line arguments:
+
+- `verbose`: Enables verbose output during execution
+- `e [number]`: Sets the number of epochs (default: 1)
+- `w1 [filename]`: Specifies the path to the weights file (default: "./data/weights/w1p.dat")
+- `build [verbose]`: Initiates the build process
+  - Adding `verbose` enables conditional preprocessing
+
+#### Examples
+
+Build with verbose preprocessing:
+```batch
+cd usage
+RUN.cmd build verbose
+```
+
+Run with custom parameters:
+```batch
+cd usage
+RUN.cmd e 5 w1 ./custom/weights.dat verbose
+```
+
 #### Contributing
 Contributions are welcome! Feel free to open an issue or submit a pull request if you would like to improve the implementation.
 
