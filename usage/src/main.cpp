@@ -14,7 +14,7 @@
 using cc_tokenizer::allocator;
 
 int main(int argc, char* argv[])
-{
+{    
     ARG arg_bs, arg_bs_line, arg_bs_para, arg_corpus, arg_dmodel, arg_epoch, arg_help, arg_verbose, arg_w1;
 
     cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char> argsv_parser(cc_tokenizer::String<char>(COMMAND));
@@ -57,7 +57,7 @@ int main(int argc, char* argv[])
             
     cc_tokenizer::String<char> input_sequence_data;
     cc_tokenizer::String<char> target_sequence_data;
-
+    
     try 
     {
         if (arg_corpus.i && arg_corpus.argc)
@@ -130,7 +130,7 @@ int main(int argc, char* argv[])
         std::cout<< std::endl;
     }
     return 0;*/
-
+    
     Collective<double> decoderInput;
     Collective<double> divisionTerm;
     Collective<double> encoderInput;    
@@ -138,11 +138,12 @@ int main(int argc, char* argv[])
     Collective<double> position;
     Collective<double> positionEncoding;
     Collective<double> targetSequence;
-    Collective<double> W1 = Collective<double>{NULL, DIMENSIONS{SKIP_GRAM_EMBEDDNG_VECTOR_SIZE, input_sequence_vocab.numberOfTokens(), NULL, NULL}}; 
-    
+    Collective<double> W1;
+                
     try
-    {    
-        READ_W_BIN(W1, file_name_w1, double);
+    {         
+        W1 = Collective<double>{NULL, DIMENSIONS{SKIP_GRAM_EMBEDDNG_VECTOR_SIZE, input_sequence_vocab.numberOfUniqueTokens(), NULL, NULL}};   
+        READ_W_BIN(W1, file_name_w1, double);        
     }
     catch (ala_exception& e)
     {
@@ -178,7 +179,8 @@ int main(int argc, char* argv[])
             {                
                 //TRAINING_LOOP_LINE_BATCH_SIZE(input_csv_parser, target_csv_parser, encoderInput, decoderInput, dimensionsOfTheModelHyperparameter, std::atoi(argv[arg_epoch.i + 1]), input_sequence_vocab, target_sequence_vocab, position, divisionTerm, positionEncoding, inputSequence, targetSequence, double, arg_verbose.i ? MAKE_IT_VERBOSE_MAIN_HH : !MAKE_IT_VERBOSE_MAIN_HH, W1);
 
-                model.startTraining(std::atoi(argv[arg_epoch.i + 1]), input_sequence_vocab, target_sequence_vocab, input_csv_parser, target_csv_parser, inputSequence, targetSequence, position,  positionEncoding, dimensionsOfTheModelHyperparameter, divisionTerm, encoderInput, decoderInput, W1, arg_verbose.i ? MAKE_IT_VERBOSE_MAIN_HH : !MAKE_IT_VERBOSE_MAIN_HH);
+                std::cout << "Start training 1" << std::endl;
+                //model.startTraining(std::atoi(argv[arg_epoch.i + 1]), input_sequence_vocab, target_sequence_vocab, input_csv_parser, target_csv_parser, inputSequence, targetSequence, position,  positionEncoding, dimensionsOfTheModelHyperparameter, divisionTerm, encoderInput, decoderInput, W1, arg_verbose.i ? MAKE_IT_VERBOSE_MAIN_HH : !MAKE_IT_VERBOSE_MAIN_HH);
             }
             else if (arg_bs_para.i) // Batch size is para
             {
@@ -192,8 +194,8 @@ int main(int argc, char* argv[])
             if (arg_bs_line.i) // Batch size is line
             {             
                 //TRAINING_LOOP_LINE_BATCH_SIZE(input_csv_parser, target_csv_parser, encoderInput, decoderInput, dimensionsOfTheModelHyperparameter, DEFAULT_EPOCH_HYPERPARAMETER, input_sequence_vocab, target_sequence_vocab, position, divisionTerm, positionEncoding, inputSequence, targetSequence, double, arg_verbose.i ? MAKE_IT_VERBOSE_MAIN_HH : !MAKE_IT_VERBOSE_MAIN_HH, W1);
-
-                model.startTraining(std::atoi(argv[arg_epoch.i + 1]), input_sequence_vocab, target_sequence_vocab, input_csv_parser, target_csv_parser, inputSequence, targetSequence, position, positionEncoding, dimensionsOfTheModelHyperparameter, divisionTerm, encoderInput, decoderInput, W1, arg_verbose.i ? MAKE_IT_VERBOSE_MAIN_HH : !MAKE_IT_VERBOSE_MAIN_HH);
+                 std::cout<< "Start training 2" << std::endl;  
+                //model.startTraining(std::atoi(argv[arg_epoch.i + 1]), input_sequence_vocab, target_sequence_vocab, input_csv_parser, target_csv_parser, inputSequence, targetSequence, position, positionEncoding, dimensionsOfTheModelHyperparameter, divisionTerm, encoderInput, decoderInput, W1, arg_verbose.i ? MAKE_IT_VERBOSE_MAIN_HH : !MAKE_IT_VERBOSE_MAIN_HH);
             }
             else if (arg_bs_para.i) // Batch size is para
             {

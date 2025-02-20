@@ -8,6 +8,33 @@
 #ifndef NLP_ENCODER_DECODER_TRANSFORMER_MODEL_HH
 #define NLP_ENCODER_DECODER_TRANSFORMER_MODEL_HH
 
+/*
+    I am using post-padding, where positions are initially generated based on the longest sequence in a batch.
+    However, some sequences in the batch may be shorter, meaning they will have padding at the end.
+
+    I want to set the positions of these padded tokens to zero, ensuring that only valid tokens have nonzero positions.
+
+    At the same time, I want to avoid using zero as a valid position value for any real token. 
+    This means the first valid position should start from a nonzero value (e.g., 0.1 or 1) to clearly distinguish real
+    tokens from padding.
+ */
+/*
+    Position encoding typically starts from 0 (as seen in transformers and many NLP models),
+    using 0.1 instead might lead to subtle differences in how positions are represented later in the pipeline.
+    
+    This is intentional, make sure it aligns with overall mathematical formulation and be ready to change it back to 0.0f.
+
+    The issue is that some sequences in the batch will be shorter than the maximum sequence length, 
+    After generating positions, we use a masking mechanism to identify padded positions and manually set them to 0.
+    Start at 1 instead of 0, this ensures that valid tokens always get a nonzero position value (avoiding ambiguity with padding).
+
+    Using post-padding, the issue is that some sequences in the batch will be shorter than the maximum sequence length, and you want to make sure:
+    - Padding positions get zeroed out so they don’t contribute to the model.
+    - Valid positions start from a nonzero value (which is why you started at 0.1 instead of 0.0).
+    you're ensuring that no valid token position is assigned 0, which could otherwise be confused with padding.
+ */
+#define POSITIONAL_ENCODING_START_VALUE 1.0f
+
 enum BatchType
 {
     SINGLE_LINE,
@@ -136,6 +163,97 @@ class Model
         }
 
         /*
+            * @param pe An output parameter of type `Collective<t>` that stores the final position encodings.
+         */
+        /**
+         * @brief Constructs position encoding for a batch of input sequences.
+         *
+         * This macro generates position encoding vectors that will be used in 
+         * transformer-based models to retain positional information.
+         *
+         * @param p  An output parameter of type `Collective<t>` representing position indices.
+         * @param pe An output parameter of type `Collective<t>` that stores the final position encodings.
+         * @param dt Division Term, an output parameter of type `Collective<t>` representing the scaling term.
+         * @param dm The model's embedding dimension.
+         * @param is An input tensor representing the input sequence batch.
+         * @param mask a mask that differentiates real tokens from padding tokens. 
+         *        Padding tokens should not receive valid position encodings because they do not contribute to the model’s 
+         *        understanding of sequence structure(padding tokens are added to make all input sequences 
+         *        uniform in length).  
+         * @param mntpl Each input sequence is padded to ensure uniform length across variable-length sequences per line.
+                  The value of maximum number of tokens/sequences per line (mntpl) determines the size of all input sequences. 
+         *        If an input line has fewer tokens, padding is added to match the required length. 
+         *
+         * Functionality:
+         * - Computes position indices (`p`) using `Numcy::arange()`, representing sequence positions.
+         * - Computes the scaling term (`dt`) using an exponential function with a predefined scaling factor.
+         * - Initializes the position encoding tensor (`pe`) with zeros.
+         * - Applies sine functions to compute position encoding values.
+         * - Fills even and odd indices separately using helper macros.
+         */
+        /*
+            m    n
+            p = mntpl x 1
+            mask = 1 x mntpl
+            n    p           
+            m x p                 
+            p * mask   
+         */
+        void buildPositionEncoding(Collective<t>& p, Collective<t>& pe, Collective<t>& dt, cc_tokenizer::string_character_traits<char>::size_type dm, Collective<t>& is, Collective<t>& mask, cc_tokenizer::string_character_traits<char>::size_type mntpl) throw (ala_exception)
+        {
+            /*
+                Getting ready for placement new.
+                Explicitly destroy old object (optional)
+             */
+            p.~Collective();            
+            dt.~Collective();
+            pe.~Collective();
+            
+            try
+            {   /*
+                    Generate position indices: range from POSITIONAL_ENCODING_START_VALUE(inclusive) to input sequence-length(exclusive), sequence-length is the number of tokens in a line.
+                    Placement new with Copy Construction
+                 */
+                new (&p) Collective<t>{Numcy::arange<t, t>((t)POSITIONAL_ENCODING_START_VALUE, (t)mntpl + (t)POSITIONAL_ENCODING_START_VALUE, (t)1.0, DIMENSIONS{1, mntpl, NULL, NULL}),  DIMENSIONS{1, mntpl, NULL, NULL}};
+                //p = Collective<t>{Numcy::arange<t, t>((t)POSITIONAL_ENCODING_START_VALUE, (t)mntpl + (t)POSITIONAL_ENCODING_START_VALUE, (t)1.0, DIMENSIONS{1, mntpl, NULL, NULL}),  DIMENSIONS{1, mntpl, NULL, NULL}};
+                p = p * mask;
+                /* 
+                    Compute scaling term dt using an exponential function. 
+                    Placement new with Copy Construction
+                 */
+                //dt = Collective<t>{Numcy::exp<t>(Numcy::arange<t, t>((t)POSITIONAL_ENCODING_START_VALUE, (t)dm  + (t)POSITIONAL_ENCODING_START_VALUE, (t)2.0, DIMENSIONS{dm, mntpl, NULL, NULL}), dm), DIMENSIONS{dm, mntpl, NULL, NULL}};
+                new (&dt) Collective<t>{Numcy::exp<t>(Numcy::arange<t, t>((t)POSITIONAL_ENCODING_START_VALUE, (t)dm  + (t)POSITIONAL_ENCODING_START_VALUE, (t)2.0, DIMENSIONS{dm, mntpl, NULL, NULL}), dm), DIMENSIONS{dm, mntpl, NULL, NULL}};
+                /* Scale dt by a predefined scaling factor */
+                dt = dt * (t)(SCALING_FACTOR(SCALING_FACTOR_CONSTANT, dm));
+                /* Compute sine-transformed position encodings */
+                Collective<t> sin_transformed_product = Numcy::sin<t>(p * dt);
+                
+                /* Initialize position encoding tensor with zeros */
+                /*
+                    Placement new Requires a Constructor Call.
+                    I can't directly use...
+                    new (&pe) Numcy::zeros<t>(DIMENSIONS{dm, is.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), NULL, NULL});
+                 */
+                t* ptr = cc_tokenizer::allocator<t>().allocate(is.getShape().getDimensionsOfArray().getNumberOfInnerArrays()*dm);
+                memset(ptr, 0, sizeof(t)*is.getShape().getDimensionsOfArray().getNumberOfInnerArrays()*dm);
+                new (&pe) Collective<t>{ptr, DIMENSIONS{dm, is.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), NULL, NULL}};
+                //pe = Collective<t>{ptr, DIMENSIONS{dm, is.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), NULL, NULL}};
+            }
+            catch (std::bad_alloc& e)
+            {
+                throw ala_exception(cc_tokenizer::String<char>("Model::buildPositionEncoding() Error: ") + cc_tokenizer::String<char>(e.what()));
+            }
+            catch (std::length_error& e)
+            {
+                throw ala_exception(cc_tokenizer::String<char>("Model::buildPositionEncoding() Error: ") + cc_tokenizer::String<char>(e.what()));
+            }            
+            catch (ala_exception& e)
+            {
+                throw ala_exception(cc_tokenizer::String<char>("Model::buildPositionEncoding() -> ") + cc_tokenizer::String<char>(e.what()));
+            }
+        }
+
+        /*
          * --------------------------------------------
          * | BUILD TARGET SEQUENCE FOR ANY BATCH SIZE |
          * --------------------------------------------
@@ -176,6 +294,7 @@ class Model
          */        
         void buildTragetSequence(cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>& tcp, CORPUS& tv, Collective<t>& ts, bool verbose = false) throw (ala_exception)
         {
+            // Getting ready for placement new.
             ts.~Collective();
 
             t *ptr = NULL;
@@ -270,6 +389,10 @@ class Model
                         memset(ptr, 0, sizeof(t)*mntpl);
                         mask = Collective<t>{ptr, DIMENSIONS{mntpl, 1, NULL, NULL}};
 
+                        /* Compute scaling term dt using an exponential function */
+                        // dt = Collective<t>{Numcy::exp<t>(Numcy::arange<t, t>((t)POSITIONAL_ENCODING_START_VALUE, (t)dm  + (t)POSITIONAL_ENCODING_START_VALUE, (t)2.0, DIMENSIONS{dm, mntpl, NULL, NULL}), dm), DIMENSIONS{dm, mntpl, NULL, NULL}};    
+                        // dt = dt * (t)(SCALING_FACTOR(SCALING_FACTOR_CONSTANT, dm));
+
                         for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < es; i++)
                         {
                             if (v)
@@ -282,13 +405,13 @@ class Model
                                 icp.get_line_by_number(j + 1);
                                 tcp.get_line_by_number(j + 1);
 
-                                if (v)
+                                if (!v)
                                 {
                                     std::cout << "Status of Forward Pass " << (j + 1) << ", input tokens# "<< icp.get_total_number_of_tokens() << ", target tokens# "<< tcp.get_total_number_of_tokens() << std::endl;
                                 }
 
-                                buildInputSequence(icp, iv, is, mask, W1, v);
-                                buildTragetSequence(tcp, tv, ts, v);
+                                //buildInputSequence(icp, iv, is, mask, W1, v);
+                                //buildTragetSequence(tcp, tv, ts, v);
 #ifdef MAKE_THIS_MODEL_VERBOSE 
                                 if (v)
                                 {
@@ -301,7 +424,23 @@ class Model
 
                                     std::cout<< std::endl;
                                 }
-#endif
+#endif                                
+                                //buildPositionEncoding(p, pe, dt, dm, is, mask, mntpl);
+                                std::cout<< "::: DEBUG DATA -: (Model::buildPositionEncoding()) for Position Encoding) :- :::"  << std::endl;
+                                std::cout<< "Number of tokens in this line: " << icp.get_total_number_of_tokens() << std::endl;                                
+                                std::cout<< "mask, Columns: " << mask.getShape().getNumberOfColumns() << ", Rows: " << mask.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
+                                for (int k = 0; k < mask.getShape().getN(); k++)
+                                {
+                                    std::cout<< mask[k] << " ";                                    
+                                }
+                                std::cout<< std::endl;
+                                std::cout<< "(p * mask), Columns: " << p.getShape().getNumberOfColumns() << ", Rows: " << p.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;                                
+                                for (int k = 0; k < p.getShape().getN(); k++)
+                                {
+                                    std::cout<< p[k] << " ";
+                                }
+                                std::cout<< std::endl;
+                                                        
                                 /* Reinitialize, input sequence and input sequence mask */                                
                                 for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < is.getShape().getN(); k++)
                                 {
@@ -311,6 +450,7 @@ class Model
                                 {
                                     mask[k] = 0;
                                 }
+                                std::cout<< "-----------------------------------------------------------------" << std::endl;
                             }
                         }
                     }
