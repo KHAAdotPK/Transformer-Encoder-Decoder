@@ -75,6 +75,8 @@ class Model
          *          Value (DEFAULT_PADDING_WORD_VECTOR_VALUE) for padding tokens (to zero out their positional encoding).
          * @t     - The data type of embeddings (e.g., float, double).
          * @w1    - Matrix of pre-trained word embeddings where each row represents a word vector.
+         * @redundancy - Optional parameter that allows for multiple occurrences of the same token in the vocabulary.
+         * @v    - Optional parameter that enables verbose output for debugging purposes.
          * 
          * Implementation:
          * 1. Allocates memory for all tokens * embedding dimension in the current line
@@ -98,14 +100,14 @@ class Model
          * Note: The Vocabulary object uses internal indexing that starts at INDEX_ORIGINATES_AT_VALUE.
          *       In contrast, word embeddings use zero-based indexing (starting at 0).
          */    
-        void buildInputSequence(cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>& icp, CORPUS& iv, Collective<t>& is, Collective<t>& mask, Collective<t>& W1, bool v = false) throw (ala_exception)
-        {
+        void buildInputSequence(cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>& icp, CORPUS& iv, Collective<t>& is, Collective<t>& mask, Collective<t>& W1, bool redundancy = ALLOW_REDUNDANCY, bool v = false) throw (ala_exception)
+        {                                                                                                                                            
             try
             {                           
                 for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < icp.get_total_number_of_tokens(); i++)
                 {
                     /* Get the index of the token in the vocabulary. These indices originate at INDEX_ORIGINATE_AT_VALUE */
-                    cc_tokenizer::string_character_traits<char>::size_type index = iv(icp.get_token_by_number(i + 1), icp.get_current_line_number(), i + 1);
+                    cc_tokenizer::string_character_traits<char>::size_type index = iv(icp.get_token_by_number(i + 1), icp.get_current_line_number(), i + 1, redundancy);
 
                     /* If this condition is false, we are no longer strictly using post-padding; instead, padding tokens may appear */
                     /* between valid tokens, leading to mixed padding. */
@@ -206,8 +208,8 @@ class Model
                 Explicitly destroy old object (optional)
              */
             p.~Collective();            
-            dt.~Collective();
-            pe.~Collective();
+            //dt.~Collective();
+            //pe.~Collective();
             
             try
             {   /*
@@ -221,12 +223,25 @@ class Model
                     Compute scaling term dt using an exponential function. 
                     Placement new with Copy Construction
                  */
+                for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < dt.getShape().getDimensionsOfArray().getNumberOfInnerArrays(); i++)
+                {
+                    t value = (t)POSITIONAL_ENCODING_START_VALUE;
+
+                    for (t j = 0; j < dm; j++)
+                    {                        
+                        dt[i*dt.getShape().getNumberOfColumns() + j] = std::exp(value);
+
+                        value = value + (t)2;    
+                    }
+                }
                 //dt = Collective<t>{Numcy::exp<t>(Numcy::arange<t, t>((t)POSITIONAL_ENCODING_START_VALUE, (t)dm  + (t)POSITIONAL_ENCODING_START_VALUE, (t)2.0, DIMENSIONS{dm, mntpl, NULL, NULL}), dm), DIMENSIONS{dm, mntpl, NULL, NULL}};
-                new (&dt) Collective<t>{Numcy::exp<t>(Numcy::arange<t, t>((t)POSITIONAL_ENCODING_START_VALUE, (t)dm  + (t)POSITIONAL_ENCODING_START_VALUE, (t)2.0, DIMENSIONS{dm, mntpl, NULL, NULL}), dm), DIMENSIONS{dm, mntpl, NULL, NULL}};
+                /*new (&dt) Collective<t>{Numcy::exp<t>(Numcy::arange<t, t>((t)POSITIONAL_ENCODING_START_VALUE, (t)dm  + (t)POSITIONAL_ENCODING_START_VALUE, (t)2.0, DIMENSIONS{dm, mntpl, NULL, NULL}), dm), DIMENSIONS{dm, mntpl, NULL, NULL}};*/
+                /*new (&dt) Collective<t>{Numcy::arange<t, t>((t)POSITIONAL_ENCODING_START_VALUE, ((t)dm  + (t)POSITIONAL_ENCODING_START_VALUE)*2, (t)2.0, DIMENSIONS{dm, mntpl, NULL, NULL}), DIMENSIONS{dm, mntpl, NULL, NULL}};*/
+                //new (&dt) Collective<t>(Numcy::zeros<t>(DIMENSIONS{dm, mntpl, NULL, NULL}));
                 /* Scale dt by a predefined scaling factor */
-                dt = dt * (t)(SCALING_FACTOR(SCALING_FACTOR_CONSTANT, dm));
+                //dt = dt * (t)(SCALING_FACTOR(SCALING_FACTOR_CONSTANT, dm));
                 /* Compute sine-transformed position encodings */
-                Collective<t> sin_transformed_product = Numcy::sin<t>(p * dt);
+                /*Collective<t> sin_transformed_product = Numcy::sin<t>(p * dt);*/
                 
                 /* Initialize position encoding tensor with zeros */
                 /*
@@ -234,9 +249,9 @@ class Model
                     I can't directly use...
                     new (&pe) Numcy::zeros<t>(DIMENSIONS{dm, is.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), NULL, NULL});
                  */
-                t* ptr = cc_tokenizer::allocator<t>().allocate(is.getShape().getDimensionsOfArray().getNumberOfInnerArrays()*dm);
-                memset(ptr, 0, sizeof(t)*is.getShape().getDimensionsOfArray().getNumberOfInnerArrays()*dm);
-                new (&pe) Collective<t>{ptr, DIMENSIONS{dm, is.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), NULL, NULL}};
+                /*t* ptr = cc_tokenizer::allocator<t>().allocate(is.getShape().getDimensionsOfArray().getNumberOfInnerArrays()*dm);*/
+                /*memset(ptr, 0, sizeof(t)*is.getShape().getDimensionsOfArray().getNumberOfInnerArrays()*dm);*/
+                /*new (&pe) Collective<t>{ptr, DIMENSIONS{dm, is.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), NULL, NULL}};*/
                 //pe = Collective<t>{ptr, DIMENSIONS{dm, is.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), NULL, NULL}};
             }
             catch (std::bad_alloc& e)
@@ -354,11 +369,11 @@ class Model
             @dt, division term
             @ei, encoder input
             @di, decoder input
-            @w1, vector of trained word embeddings, used as an input sequence
-            @v, be verbose when true
-            @batch,                                                                                                                                                             
+            @w1, vector of trained word embeddings, used as an input sequence            
+            @batch, batch type 
+            @v, be verbose when true                                                                                                                                                           
          */
-        void startTraining(cc_tokenizer::string_character_traits<char>::size_type es, CORPUS& iv, CORPUS& tv, cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>& icp, cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>& tcp, Collective<t>& is, Collective<t>& ts, Collective<t>& p, Collective<t>& pe, cc_tokenizer::string_character_traits<char>::size_type dm, Collective<t>& dt, Collective<t>& ei, Collective<t>& di, Collective<t>& W1, bool v = false, BatchType batch = SINGLE_LINE) throw (ala_exception)
+        void startTraining(cc_tokenizer::string_character_traits<char>::size_type es, CORPUS& iv, CORPUS& tv, cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>& icp, cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>& tcp, Collective<t>& is, Collective<t>& ts, Collective<t>& p, Collective<t>& pe, cc_tokenizer::string_character_traits<char>::size_type dm, Collective<t>& dt, Collective<t>& ei, Collective<t>& di, Collective<t>& W1, BatchType batch = SINGLE_LINE, bool v = false) throw (ala_exception)
         {
             switch (batch)
             {
@@ -389,10 +404,12 @@ class Model
                         memset(ptr, 0, sizeof(t)*mntpl);
                         mask = Collective<t>{ptr, DIMENSIONS{mntpl, 1, NULL, NULL}};
 
-                        /* Compute scaling term dt using an exponential function */
-                        // dt = Collective<t>{Numcy::exp<t>(Numcy::arange<t, t>((t)POSITIONAL_ENCODING_START_VALUE, (t)dm  + (t)POSITIONAL_ENCODING_START_VALUE, (t)2.0, DIMENSIONS{dm, mntpl, NULL, NULL}), dm), DIMENSIONS{dm, mntpl, NULL, NULL}};    
-                        // dt = dt * (t)(SCALING_FACTOR(SCALING_FACTOR_CONSTANT, dm));
+                        /* Allocate enough memory for scaling term dt and reset it to zeros */
+                        ptr = cc_tokenizer::allocator<t>().allocate(dm*mntpl);
 
+                        memset(ptr, 0, sizeof(t)*dm*mntpl);
+                        dt = Collective<t>{ptr, DIMENSIONS{dm, mntpl, NULL, NULL}};
+                        
                         for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < es; i++)
                         {
                             if (v)
@@ -405,13 +422,36 @@ class Model
                                 icp.get_line_by_number(j + 1);
                                 tcp.get_line_by_number(j + 1);
 
-                                if (!v)
+                                if (v)
                                 {
                                     std::cout << "Status of Forward Pass " << (j + 1) << ", input tokens# "<< icp.get_total_number_of_tokens() << ", target tokens# "<< tcp.get_total_number_of_tokens() << std::endl;
                                 }
 
-                                //buildInputSequence(icp, iv, is, mask, W1, v);
-                                //buildTragetSequence(tcp, tv, ts, v);
+                                buildInputSequence(icp, iv, is, mask, W1, !ALLOW_REDUNDANCY);
+                                std::cout<< "Number of tokens in this line: " << icp.get_total_number_of_tokens() << std::endl; 
+                                std::cout<< "::: DEBUG DATA -: Model::buildInputSequence() :- :::"  << std::endl;
+                                std::cout<< "is(Input Sequence), Columns: " << is.getShape().getNumberOfColumns() << ", Rows: " << is.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
+                                for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < is.getShape().getN(); k++)
+                                {
+                                    std::cout<< is[(k/is.getShape().getNumberOfColumns())*is.getShape().getNumberOfColumns() + (k%is.getShape().getNumberOfColumns())] << " ";
+
+                                    if ((k + 1)%is.getShape().getNumberOfColumns() == 0)
+                                    {
+                                        std::cout<< std::endl;
+                                    }
+                                }
+                                std::cout<< "mask, Columns: " << mask.getShape().getNumberOfColumns() << ", Rows: " << mask.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
+                                for (int k = 0; k < mask.getShape().getN(); k++)
+                                {
+                                    std::cout<< mask[(k/mask.getShape().getNumberOfColumns())*mask.getShape().getNumberOfColumns() + (k%mask.getShape().getNumberOfColumns())] << " ";
+                                    if ((k + 1)%mask.getShape().getNumberOfColumns() == 0)
+                                    {
+                                        std::cout<< std::endl;
+                                    }
+                                }
+                                
+                                buildTragetSequence(tcp, tv, ts, v);
+                                std::cout<< "::: DEBUG DATA -: Model::buildTargetSequence() :- :::"  << std::endl;
 #ifdef MAKE_THIS_MODEL_VERBOSE 
                                 if (v)
                                 {
@@ -425,21 +465,27 @@ class Model
                                     std::cout<< std::endl;
                                 }
 #endif                                
-                                //buildPositionEncoding(p, pe, dt, dm, is, mask, mntpl);
-                                std::cout<< "::: DEBUG DATA -: (Model::buildPositionEncoding()) for Position Encoding) :- :::"  << std::endl;
-                                std::cout<< "Number of tokens in this line: " << icp.get_total_number_of_tokens() << std::endl;                                
-                                std::cout<< "mask, Columns: " << mask.getShape().getNumberOfColumns() << ", Rows: " << mask.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
-                                for (int k = 0; k < mask.getShape().getN(); k++)
-                                {
-                                    std::cout<< mask[k] << " ";                                    
-                                }
-                                std::cout<< std::endl;
-                                std::cout<< "(p * mask), Columns: " << p.getShape().getNumberOfColumns() << ", Rows: " << p.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;                                
+                                buildPositionEncoding(p, pe, dt, dm, is, mask, mntpl);
+                                std::cout<< "::: DEBUG DATA -: (Model::buildPositionEncoding()) for Position Encoding) :- :::"  << std::endl;                                                                                                                                                                
+                                std::cout<< "(p * mask), Columns: " << p.getShape().getNumberOfColumns() << ", Rows: " << p.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;                                                                
                                 for (int k = 0; k < p.getShape().getN(); k++)
                                 {
-                                    std::cout<< p[k] << " ";
+                                    std::cout<< p[(k/p.getShape().getNumberOfColumns())*p.getShape().getNumberOfColumns() + (k%p.getShape().getNumberOfColumns())] << " ";
+                                    if ((k + 1)%p.getShape().getNumberOfColumns() == 0)
+                                    {
+                                        std::cout<< std::endl;
+                                    }
                                 }
-                                std::cout<< std::endl;
+                                std::cout<< "dt, Columns: " << dt.getShape().getNumberOfColumns() << ", Rows: " << dt.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
+                                for (int k = 0; k < dt.getShape().getN(); k++)
+                                {
+                                    std::cout<< dt[(k/dt.getShape().getNumberOfColumns())*dt.getShape().getNumberOfColumns() + (k%dt.getShape().getNumberOfColumns())] << " ";
+                                    if ((k + 1)%dt.getShape().getNumberOfColumns() == 0)
+                                    {
+                                        std::cout<< std::endl;
+                                    }
+                                }
+                                std::cout<< "*++++++++++++++++++++++++++++++++++++++*" << std::endl;
                                                         
                                 /* Reinitialize, input sequence and input sequence mask */                                
                                 for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < is.getShape().getN(); k++)
@@ -450,7 +496,10 @@ class Model
                                 {
                                     mask[k] = 0;
                                 }
-                                std::cout<< "-----------------------------------------------------------------" << std::endl;
+                                for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < dt.getShape().getN(); k++)
+                                {
+                                    dt[k] = 0;
+                                }
                             }
                         }
                     }
