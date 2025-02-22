@@ -217,11 +217,18 @@ class Model
                     Placement new with Copy Construction
                  */
                 new (&p) Collective<t>{Numcy::arange<t, t>((t)POSITIONAL_ENCODING_START_VALUE, (t)mntpl + (t)POSITIONAL_ENCODING_START_VALUE, (t)1.0, DIMENSIONS{1, mntpl, NULL, NULL}),  DIMENSIONS{1, mntpl, NULL, NULL}};
+                /*for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < mntpl; i++)
+                {
+                    p[i] = (t)POSITIONAL_ENCODING_START_VALUE + i;
+                }
                 //p = Collective<t>{Numcy::arange<t, t>((t)POSITIONAL_ENCODING_START_VALUE, (t)mntpl + (t)POSITIONAL_ENCODING_START_VALUE, (t)1.0, DIMENSIONS{1, mntpl, NULL, NULL}),  DIMENSIONS{1, mntpl, NULL, NULL}};
+                std::cout<< "p, Columns: " << p.getShape().getNumberOfColumns() << ", Rows: " << p.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;*/
                 p = p * mask;
                 /* 
                     Compute scaling term dt using an exponential function. 
-                    Placement new with Copy Construction
+                    Placement new with Copy Construction does not work here...
+
+                    new (&dt) Collective<t>{Numcy::exp<t>(Numcy::arange<t, t>((t)POSITIONAL_ENCODING_START_VALUE, (t)dm  + (t)POSITIONAL_ENCODING_START_VALUE, (t)2.0, DIMENSIONS{dm, mntpl, NULL, NULL}), dm), DIMENSIONS{dm, mntpl, NULL, NULL}};
                  */
                 for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < dt.getShape().getDimensionsOfArray().getNumberOfInnerArrays(); i++)
                 {
@@ -233,16 +240,13 @@ class Model
 
                         value = value + (t)2;    
                     }
-                }
-                //dt = Collective<t>{Numcy::exp<t>(Numcy::arange<t, t>((t)POSITIONAL_ENCODING_START_VALUE, (t)dm  + (t)POSITIONAL_ENCODING_START_VALUE, (t)2.0, DIMENSIONS{dm, mntpl, NULL, NULL}), dm), DIMENSIONS{dm, mntpl, NULL, NULL}};
-                /*new (&dt) Collective<t>{Numcy::exp<t>(Numcy::arange<t, t>((t)POSITIONAL_ENCODING_START_VALUE, (t)dm  + (t)POSITIONAL_ENCODING_START_VALUE, (t)2.0, DIMENSIONS{dm, mntpl, NULL, NULL}), dm), DIMENSIONS{dm, mntpl, NULL, NULL}};*/
-                /*new (&dt) Collective<t>{Numcy::arange<t, t>((t)POSITIONAL_ENCODING_START_VALUE, ((t)dm  + (t)POSITIONAL_ENCODING_START_VALUE)*2, (t)2.0, DIMENSIONS{dm, mntpl, NULL, NULL}), DIMENSIONS{dm, mntpl, NULL, NULL}};*/
-                //new (&dt) Collective<t>(Numcy::zeros<t>(DIMENSIONS{dm, mntpl, NULL, NULL}));
+                }                
                 /* Scale dt by a predefined scaling factor */
                 dt = dt * (t)(SCALING_FACTOR(SCALING_FACTOR_CONSTANT, dm));
-                /* Compute sine-transformed position encodings */
-                /*Collective<t> sin_transformed_product = Numcy::sin<t>(p * dt);*/
-                
+                /* Compute sine-transformed position encodings */                
+                Collective<t> sin_transformed_product = Numcy::sin<t>(p * dt);
+                /* Fill even and odd indices separately */
+                std::cout<< "sin_transformed_product, Columns: " << sin_transformed_product.getShape().getNumberOfColumns() << ", Rows: " << sin_transformed_product.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
                 /* Initialize position encoding tensor with zeros */
                 /*
                     Placement new Requires a Constructor Call.
@@ -253,6 +257,16 @@ class Model
                 /*memset(ptr, 0, sizeof(t)*is.getShape().getDimensionsOfArray().getNumberOfInnerArrays()*dm);*/
                 /*new (&pe) Collective<t>{ptr, DIMENSIONS{dm, is.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), NULL, NULL}};*/
                 //pe = Collective<t>{ptr, DIMENSIONS{dm, is.getShape().getDimensionsOfArray().getNumberOfInnerArrays(), NULL, NULL}};
+                //FILL_EVEN_INDICES_OF_POSITION_ENCODING(pe, sin_transformed_product);
+                /* Fill even and odd indices separately */
+                for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < pe.getShape().getN(); i+=2)
+                {
+                    pe[i] = sin_transformed_product[i];
+                }
+                for (cc_tokenizer::string_character_traits<char>::size_type i = 1; i < pe.getShape().getN(); i+=2)
+                {
+                    pe[i] = sin_transformed_product[i];
+                }
             }
             catch (std::bad_alloc& e)
             {
@@ -394,6 +408,11 @@ class Model
                             followed by padding. This means that all padding appears at the end, not in the middle or mixed with real tokens. 
                          */
 
+                        /*ptr = cc_tokenizer::allocator<t>().allocate(mntpl); 
+
+                        memset(ptr, 0, sizeof(t)*mntpl);
+                        p = Collective<t>{ptr, DIMENSIONS{1, mntpl, NULL, NULL}};*/
+
                         ptr = cc_tokenizer::allocator<t>().allocate(mntpl*W1.getShape().getNumberOfColumns());
 
                         memset (ptr, 0, sizeof(t)*(mntpl*W1.getShape().getNumberOfColumns()));
@@ -409,6 +428,11 @@ class Model
 
                         memset(ptr, 0, sizeof(t)*dm*mntpl);
                         dt = Collective<t>{ptr, DIMENSIONS{dm, mntpl, NULL, NULL}};
+
+                        ptr = cc_tokenizer::allocator<t>().allocate(mntpl*dm); 
+
+                        memset(ptr, 0, sizeof(t)*mntpl*dm);
+                        pe = Collective<t>{ptr, DIMENSIONS{dm, mntpl, NULL, NULL}};
                         
                         for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < es; i++)
                         {
@@ -485,9 +509,22 @@ class Model
                                         std::cout<< std::endl;
                                     }
                                 }
+                                std::cout<< "pe, Columns: " << pe.getShape().getNumberOfColumns() << ", Rows: " << pe.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
+                                for (int k = 0; k < pe.getShape().getN(); k++)
+                                {
+                                    std::cout<< pe[(k/pe.getShape().getNumberOfColumns())*pe.getShape().getNumberOfColumns() + (k%pe.getShape().getNumberOfColumns())] << " ";
+                                    if ((k + 1)%pe.getShape().getNumberOfColumns() == 0)
+                                    {
+                                        std::cout<< std::endl;
+                                    }
+                                }
                                 std::cout<< "*++++++++++++++++++++++++++++++++++++++*" << std::endl;
                                                         
-                                /* Reinitialize, input sequence and input sequence mask */                                
+                                /* Reinitialize, input sequence and input sequence mask */
+                                /*for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < p.getShape().getN(); k++)
+                                {
+                                    p[k] = 0;
+                                }*/
                                 for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < is.getShape().getN(); k++)
                                 {
                                     is[k] = 0;
@@ -499,6 +536,10 @@ class Model
                                 for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < dt.getShape().getN(); k++)
                                 {
                                     dt[k] = 0;
+                                }
+                                for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < pe.getShape().getN(); k++)
+                                {
+                                    pe[k] = 0;
                                 }
                             }
                         }
@@ -594,6 +635,7 @@ Collective<T> softmax(Collective<T>& a, bool verbose = false) throw (ala_excepti
     return e_a_minus_max_divided_by_e_a_minus_max_sum;
 }
 
+
 /*          
     @brief Computes sine and cosine values for a templated type and fills even and odd indices of the position encoding array.
             
@@ -620,21 +662,22 @@ Collective<T> softmax(Collective<T>& a, bool verbose = false) throw (ala_excepti
     @param s Collective instance representing Numcy::sin<t>((p * dt)).
 */
 #define FILL_EVEN_INDICES_OF_POSITION_ENCODING(pe, s) {\
-try\
-{\
-    for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < s.getShape().getDimensionsOfArray().getNumberOfInnerArrays(); i+=2)\
+    try\
     {\
-        for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < s.getShape().getNumberOfColumns(); j++)\
+        for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < s.getShape().getDimensionsOfArray().getNumberOfInnerArrays(); i+=2)\
         {\
-            pe[i*pe.getShape().getNumberOfColumns() + j] = s[i*s.getShape().getNumberOfColumns() + j];\
+            for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < s.getShape().getNumberOfColumns(); j++)\
+            {\
+                pe[i*pe.getShape().getNumberOfColumns() + j] = s[i*s.getShape().getNumberOfColumns() + j];\
+            }\
         }\
     }\
-}\
-catch (ala_exception& e)\
-{\
-    throw ala_exception(cc_tokenizer::String<char>("FILL_EVEN_INDICES_OF_POSITION_ENCODING() -> ") + e.what());\
-}\
-}\
+    catch (ala_exception& e)\
+    {\
+        throw ala_exception(cc_tokenizer::String<char>("FILL_EVEN_INDICES_OF_POSITION_ENCODING() -> ") + e.what());\
+    }\
+    }\
+
 
 #define FILL_EVEN_INDICES_OF_POSITION_ENCODING_OLD(pe, s) {\
 try\
