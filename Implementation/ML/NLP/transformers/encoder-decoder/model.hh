@@ -216,14 +216,16 @@ class Model
                     Generate position indices: range from POSITIONAL_ENCODING_START_VALUE(inclusive) to input sequence-length(exclusive), sequence-length is the number of tokens in a line.
                     Placement new with Copy Construction
                  */
-                new (&p) Collective<t>{Numcy::arange<t, t>((t)POSITIONAL_ENCODING_START_VALUE, (t)mntpl + (t)POSITIONAL_ENCODING_START_VALUE, (t)1.0, DIMENSIONS{1, mntpl, NULL, NULL}),  DIMENSIONS{1, mntpl, NULL, NULL}};
+                new (&p) Collective<t>{Numcy::arange<t, t>((t)POSITIONAL_ENCODING_START_VALUE, (t)mntpl + (t)POSITIONAL_ENCODING_START_VALUE, (t)1.0, DIMENSIONS{1, mntpl, NULL, NULL}), DIMENSIONS{1, mntpl, NULL, NULL}};
                 /*for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < mntpl; i++)
                 {
                     p[i] = (t)POSITIONAL_ENCODING_START_VALUE + i;
                 }
-                //p = Collective<t>{Numcy::arange<t, t>((t)POSITIONAL_ENCODING_START_VALUE, (t)mntpl + (t)POSITIONAL_ENCODING_START_VALUE, (t)1.0, DIMENSIONS{1, mntpl, NULL, NULL}),  DIMENSIONS{1, mntpl, NULL, NULL}};
-                std::cout<< "p, Columns: " << p.getShape().getNumberOfColumns() << ", Rows: " << p.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;*/
+                p = Collective<t>{Numcy::arange<t, t>((t)POSITIONAL_ENCODING_START_VALUE, (t)mntpl + (t)POSITIONAL_ENCODING_START_VALUE, (t)1.0, DIMENSIONS{1, mntpl, NULL, NULL}),  DIMENSIONS{1, mntpl, NULL, NULL}};*/
+                /*std::cout<< "p, Columns: " << p.getShape().getNumberOfColumns() << ", Rows: " << p.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;*/
                 p = p * mask;
+                /*std::cout<< "p, Columns: " << p.getShape().getNumberOfColumns() << ", Rows: " << p.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;*/
+                p = Numcy::transpose<t>(p);
                 /* 
                     Compute scaling term dt using an exponential function. 
                     Placement new with Copy Construction does not work here...
@@ -491,7 +493,7 @@ class Model
 #endif                                
                                 buildPositionEncoding(p, pe, dt, dm, is, mask, mntpl);
                                 std::cout<< "::: DEBUG DATA -: (Model::buildPositionEncoding()) for Position Encoding) :- :::"  << std::endl;                                                                                                                                                                
-                                std::cout<< "(p * mask), Columns: " << p.getShape().getNumberOfColumns() << ", Rows: " << p.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;                                                                
+                                std::cout<< "Transposed(p * mask), Columns: " << p.getShape().getNumberOfColumns() << ", Rows: " << p.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;                                                                
                                 for (int k = 0; k < p.getShape().getN(); k++)
                                 {
                                     std::cout<< p[(k/p.getShape().getNumberOfColumns())*p.getShape().getNumberOfColumns() + (k%p.getShape().getNumberOfColumns())] << " ";
