@@ -239,7 +239,7 @@ class Model
                 /*new (&dt) Collective<t>{Numcy::arange<t, t>((t)POSITIONAL_ENCODING_START_VALUE, ((t)dm  + (t)POSITIONAL_ENCODING_START_VALUE)*2, (t)2.0, DIMENSIONS{dm, mntpl, NULL, NULL}), DIMENSIONS{dm, mntpl, NULL, NULL}};*/
                 //new (&dt) Collective<t>(Numcy::zeros<t>(DIMENSIONS{dm, mntpl, NULL, NULL}));
                 /* Scale dt by a predefined scaling factor */
-                //dt = dt * (t)(SCALING_FACTOR(SCALING_FACTOR_CONSTANT, dm));
+                dt = dt * (t)(SCALING_FACTOR(SCALING_FACTOR_CONSTANT, dm));
                 /* Compute sine-transformed position encodings */
                 /*Collective<t> sin_transformed_product = Numcy::sin<t>(p * dt);*/
                 
@@ -476,7 +476,7 @@ class Model
                                         std::cout<< std::endl;
                                     }
                                 }
-                                std::cout<< "dt, Columns: " << dt.getShape().getNumberOfColumns() << ", Rows: " << dt.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
+                                std::cout<< "dt * SCALING_FACTOR, Columns: " << dt.getShape().getNumberOfColumns() << ", Rows: " << dt.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
                                 for (int k = 0; k < dt.getShape().getN(); k++)
                                 {
                                     std::cout<< dt[(k/dt.getShape().getNumberOfColumns())*dt.getShape().getNumberOfColumns() + (k%dt.getShape().getNumberOfColumns())] << " ";
