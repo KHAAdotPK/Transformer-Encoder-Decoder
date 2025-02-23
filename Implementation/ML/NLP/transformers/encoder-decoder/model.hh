@@ -223,7 +223,36 @@ class Model
                 }
                 p = Collective<t>{Numcy::arange<t, t>((t)POSITIONAL_ENCODING_START_VALUE, (t)mntpl + (t)POSITIONAL_ENCODING_START_VALUE, (t)1.0, DIMENSIONS{1, mntpl, NULL, NULL}),  DIMENSIONS{1, mntpl, NULL, NULL}};*/
                 /*std::cout<< "p, Columns: " << p.getShape().getNumberOfColumns() << ", Rows: " << p.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;*/
+                /*
+                 * Perform element-wise multiplication between the position matrix `p` and the mask matrix `mask`.
+                 *
+                 * Why this is done:
+                 * - The position matrix `p` contains positional encodings for each token in the sequence.
+                 * - The mask matrix `mask` indicates which tokens are valid (1) and which are padding (0).
+                 * - By multiplying `p` and `mask` element-wise, we ensure that positional encodings for invalid tokens
+                 *   (padding) are zeroed out, while valid tokens retain their positional values.
+                 *
+                 * How this works:
+                 * - Both `p` and `mask` have the same number of elements, but they may have different shapes.
+                 * - The `[]` operator is overloaded to access elements linearly, regardless of the shapes of `p` and `mask`.
+                 * - The loop iterates over each element of `p` and `mask`, multiplying them together and storing the result in `p`.
+                 *
+                 * Example:
+                 * - If `p` is [1, 2, 3] and `mask` is [1, 1, 0], the result will be [1, 2, 0].
+                 * - This ensures that the positional encoding for the third token (padding) is zeroed out.
+                 *
+                 * Note:
+                 * - This is NOT broadcasting. Broadcasting would automatically expand the smaller array to match the shape
+                 *   of the larger array, but here we are explicitly iterating over the elements and performing the
+                 *   multiplication manually.
+                 */                
+                for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < mntpl; i++)
+                {
+                    p[i] = p[i] * mask[i];
+                }
+
                 p = p * mask;
+                
                 /*std::cout<< "p, Columns: " << p.getShape().getNumberOfColumns() << ", Rows: " << p.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;*/
                 p = Numcy::transpose<t>(p);
                 /* 
