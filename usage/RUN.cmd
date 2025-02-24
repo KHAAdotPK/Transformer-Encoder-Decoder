@@ -18,6 +18,7 @@
 setlocal enabledelayedexpansion
 
 set build_verbose_option="CSVPreprocessorDefinitions=no"
+set build_verbose_option_for_position_encoding="BuildPositionEncodingVerbose=no"
 set verbose_option=
 set w1_filename_option="./data/weights/w1p.dat"
 set epochs_option=1
@@ -44,9 +45,10 @@ if "%1"=="verbose" (
     goto :start_parsing_args
 ) else if "%1"=="build" (
     if "%2" neq "" ( 
-        if "%2" == "verbose" (
-            @echo "ELLO WOELD"
+        if "%2"=="verbose" (            
             set build_verbose_option="CSVPreprocessorDefinitions=yes"            
+        ) else if "%2"=="verbose_pe" (
+            set build_verbose_option_for_position_encoding="BuildPositionEncodingVerbose=yes"
         )
         shift
     )
@@ -63,7 +65,7 @@ goto :run
 @rem /p is short for /property
 @rem msbuild lib\libpng\libpng.csproj /p:Configuration=Debug /p:Platform=x64
 @rem msbuild project.xml /p:CSVPreprocessorDefinitions=yes
-@ msbuild project.xml /p:%build_verbose_option%
+@ msbuild project.xml /p:%build_verbose_option_for_position_encoding% /p:%build_verbose_option%
 goto :eof
 
 :run

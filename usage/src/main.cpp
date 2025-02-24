@@ -96,7 +96,7 @@ int main(int argc, char* argv[])
 
     // instance of parser and the size of corpus in number of lines
     try
-    {       
+    {                    
         input_sequence_vocab = Corpus(input_csv_parser/*, 13*/);
         target_sequence_vocab = Corpus(target_csv_parser/*, 13*/);
     }

@@ -134,28 +134,7 @@ class Model
                         throw ala_exception("Model::buildInputSequence() Error: Encountered a token that is not present in the vocabulary. This should never happen if the inputs are within the expected range. Potential cause: Vocabulary is incomplete or incorrectly loaded.");
                     }                
                 }
-#ifdef MAKE_THIS_MODEL_VERBOSE 
-                if (v)
-                {   
-                    std::cout<< "::: DEBUG DATA -: (Model::buildInputSequence()) :- :::"  << std::endl;
-                    std::cout<< "mask --> ";              
-                    for (int i = 0; i < mask.getShape().getN(); i++)
-                    {
-                        std::cout<< mask[i] << ", ";
-                    }
-                    std::cout<< " tokens#" << icp.get_total_number_of_tokens() << std::endl;
-                    std::cout<< "Input-Sequence" << std::endl;
-                    for (int i = 0; i < mask.getShape().getN(); i++)
-                    {
-                        std::cout<< "--> ";
-                        for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < is.getShape().getNumberOfColumns(); j++)
-                        {
-                            std::cout<< is[i*W1.getShape().getNumberOfColumns() + j] << ", ";
-                        }
-
-                        std::cout<< std::endl;
-                    }
-                }    
+#ifdef MAKE_THIS_MODEL_VERBOSE                     
 #endif                
             }
             catch (ala_exception& e)
@@ -277,7 +256,9 @@ class Model
                 /* Compute sine-transformed position encodings */                
                 Collective<t> sin_transformed_product = Numcy::sin<t>(p * dt);
                 /* Fill even and odd indices separately */
+#ifdef MAKE_THIS_MODEL_VERBOSE_FOR_POSITION_ENCODING                
                 std::cout<< "sin_transformed_product, Columns: " << sin_transformed_product.getShape().getNumberOfColumns() << ", Rows: " << sin_transformed_product.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
+#endif                
                 /* Initialize position encoding tensor with zeros */
                 /*
                     Placement new Requires a Constructor Call.
@@ -483,9 +464,10 @@ class Model
                                 }
 
                                 buildInputSequence(icp, iv, is, mask, W1, !ALLOW_REDUNDANCY);
+#ifdef MAKE_THIS_MODEL_VERBOSE_FOR_POSITION_ENCODING                                
                                 std::cout<< "Number of tokens in this line: " << icp.get_total_number_of_tokens() << std::endl; 
                                 std::cout<< "::: DEBUG DATA -: Model::buildInputSequence() :- :::"  << std::endl;
-                                std::cout<< "is(Input Sequence), Columns: " << is.getShape().getNumberOfColumns() << ", Rows: " << is.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
+                                std::cout<< "is(Input Sequence), Columns: " << is.getShape().getNumberOfColumns() << ", Rows: " << is.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;                                
                                 for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < is.getShape().getN(); k++)
                                 {
                                     std::cout<< is[(k/is.getShape().getNumberOfColumns())*is.getShape().getNumberOfColumns() + (k%is.getShape().getNumberOfColumns())] << " ";
@@ -504,23 +486,13 @@ class Model
                                         std::cout<< std::endl;
                                     }
                                 }
-                                
+#endif                                
                                 buildTragetSequence(tcp, tv, ts, v);
+#ifdef MAKE_THIS_MODEL_VERBOSE_FOR_POSITION_ENCODING                                
                                 std::cout<< "::: DEBUG DATA -: Model::buildTargetSequence() :- :::"  << std::endl;
-#ifdef MAKE_THIS_MODEL_VERBOSE 
-                                if (v)
-                                {
-                                    std::cout<< "::: DEBUG DATA -: (Model::startTraining() for Target Sequence) :- :::"  << std::endl;
-
-                                    for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < ts.getShape().getN(); k++)
-                                    {
-                                        std::cout<< ts[k] << " ";
-                                    }
-
-                                    std::cout<< std::endl;
-                                }
 #endif                                
                                 buildPositionEncoding(p, pe, dt, dm, is, mask, mntpl);
+#ifdef MAKE_THIS_MODEL_VERBOSE_FOR_POSITION_ENCODING                                
                                 std::cout<< "::: DEBUG DATA -: (Model::buildPositionEncoding()) for Position Encoding) :- :::"  << std::endl;                                                                                                                                                                
                                 std::cout<< "Transposed(p * mask), Columns: " << p.getShape().getNumberOfColumns() << ", Rows: " << p.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;                                                                
                                 for (int k = 0; k < p.getShape().getN(); k++)
@@ -550,7 +522,22 @@ class Model
                                     }
                                 }
                                 std::cout<< "*++++++++++++++++++++++++++++++++++++++*" << std::endl;
-                                                        
+#endif                          
+                                //std::cout<< "JUST ABOVE CONCATENATION" << std::endl;
+                                ei = Numcy::concatenate(pe, is); 
+                                //std::cout<< "BELOW CONCATENATION" << std::endl;
+                                
+                                std::cout<< "::: DEBUG DATA -: Encoder Input(ei) :- :::"  << std::endl;
+                                std::cout<< "Columns: " << ei.getShape().getNumberOfColumns() << ", Rows: " << ei.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
+                                for (int k = 0; k < ei.getShape().getN(); k++)
+                                {
+                                    std::cout<< ei[(k/ei.getShape().getNumberOfColumns())*ei.getShape().getNumberOfColumns() + (k%ei.getShape().getNumberOfColumns())] << " ";
+                                    if ((k + 1)%ei.getShape().getNumberOfColumns() == 0)
+                                    {
+                                        std::cout<< std::endl;
+                                    }
+                                }
+
                                 /* Reinitialize, input sequence and input sequence mask */
                                 /*for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < p.getShape().getN(); k++)
                                 {

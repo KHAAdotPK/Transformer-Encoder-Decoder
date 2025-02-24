@@ -19,8 +19,9 @@
     <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
     <ItemDefinitionGroup>
         <ClCompile>
-           <PreprocessorDefinitions Condition="'$(CSVPreprocessorDefinitions)'=='yes'">MAKE_THIS_MODEL_VERBOSE</PreprocessorDefinitions> 
+           <PreprocessorDefinitions Condition="'$(CSVPreprocessorDefinitions)'=='yes'">MAKE_THIS_MODEL_VERBOSE</PreprocessorDefinitions>
            <!-- <PreprocessorDefinitions Condition="'$(CSVPreprocessorDefinitions)'=='yes'">CSV_EXAMPLE_APPLICATION;CSV_NOT_ALLOW_EMPTY_TOKENS;GRAMMAR_END_OF_TOKEN_MARKER=' ';GRAMMAR_END_OF_LINE_MARKER='\n'</PreprocessorDefinitions> -->
+           <PreprocessorDefinitions Condition="'$(BuildPositionEncodingVerbose)'=='yes'">MAKE_THIS_MODEL_VERBOSE_FOR_POSITION_ENCODING</PreprocessorDefinitions>
         </ClCompile>                
     </ItemDefinitionGroup>
     <ItemGroup>                 
