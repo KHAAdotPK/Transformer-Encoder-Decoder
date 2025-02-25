@@ -51,14 +51,26 @@ class Attention // is all you need.
 
             //cc_tokenizer::string_character_traits<char>::size_type *ptr = cc_tokenizer::allocator<cc_tokenizer::string_character_traits<char>::size_type>().allocate(5);            
             //cc_tokenizer::string_character_traits<char>::size_type *ptr = reinterpret_cast<cc_tokenizer::string_character_traits<char>::size_type*>(cc_tokenizer::allocator<unsigned int>().allocate(5));
+           
             DIMENSIONS dim = DIMENSIONS{d_model, d_model, NULL, NULL};
-            queryWeights = Numcy::Random::randn<t>(dim);
-            keyWeights = Numcy::Random::randn<t>(dim);
-            valueWeights = Numcy::Random::randn<t>(dim);
-
-            outputWeights = Numcy::Random::randn<t>(dim);
-
-            scaleFactor = sqrt(d_model / num_heads);  // Scaling factor for stability
+            
+            try
+            {            
+                queryWeights = Numcy::Random::randn<t>(dim);
+                keyWeights = Numcy::Random::randn<t>(dim);
+                valueWeights = Numcy::Random::randn<t>(dim);
+                outputWeights = Numcy::Random::randn<t>(dim);
+            }
+            catch (ala_exception& e)
+            {                
+                throw ala_exception(cc_tokenizer::String<char>("Attention::Attention() -> ") + e.what());
+            }
+           
+            //scaleFactor = std::sqrt(d_model / num_heads);  // Scaling factor for stability
+            /*
+                Since the scaling factor in self-attention is typically sqrt(d_k), where d_k is the dimension of a single attention head.
+             */
+            scaleFactor = std::sqrt(d_model);
         }
 
         /*

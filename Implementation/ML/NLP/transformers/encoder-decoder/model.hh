@@ -520,13 +520,10 @@ class Model
                                     {
                                         std::cout<< std::endl;
                                     }
-                                }
-                                std::cout<< "*++++++++++++++++++++++++++++++++++++++*" << std::endl;
+                                }                                
 #endif                          
-                                //std::cout<< "JUST ABOVE CONCATENATION" << std::endl;
                                 ei = Numcy::concatenate(pe, is); 
-                                //std::cout<< "BELOW CONCATENATION" << std::endl;
-                                
+                                                                
                                 std::cout<< "::: DEBUG DATA -: Encoder Input(ei) :- :::"  << std::endl;
                                 std::cout<< "Columns: " << ei.getShape().getNumberOfColumns() << ", Rows: " << ei.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
                                 for (int k = 0; k < ei.getShape().getN(); k++)
@@ -537,6 +534,10 @@ class Model
                                         std::cout<< std::endl;
                                     }
                                 }
+
+                                Encoder<t> encoder(ei.getShape().getNumberOfColumns(), DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER);
+                                encoder.forward(ei);                                
+                                std::cout<< "*++++++++++++++++++++++++++++++++++++++*" << std::endl;
 
                                 /* Reinitialize, input sequence and input sequence mask */
                                 /*for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < p.getShape().getN(); k++)

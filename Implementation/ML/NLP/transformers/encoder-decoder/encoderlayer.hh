@@ -45,7 +45,7 @@ class EncoderLayer
 {       
     Attention<t> attention;
     EncoderFeedForwardNetwork<t> ffn; // Forward Feed Network
-    EncoderLayerNormalization<t> norm1, norm2; //
+    EncoderLayerNormalization<t> norm1, norm2; // Layer Normalization
     
     cc_tokenizer::string_character_traits<char>::size_type dimensionsOfTheModel, numberOfAttentionHeads;
     t dropOutRate;
@@ -59,7 +59,7 @@ class EncoderLayer
             @num_heads, Number of attention heads. 
             @dropout_rate, Dropout rate for regularization. The dropout_rate in the Transformer model is a regularization technique to prevent overfitting.
          */
-        EncoderLayer(cc_tokenizer::string_character_traits<char>::size_type d_model, cc_tokenizer::string_character_traits<char>::size_type num_heads, t dropout_rate) : dropOutRate(dropout_rate), attention(d_model, num_heads), ffn(d_model, dropout_rate), norm1(d_model), norm2(d_model)
+        EncoderLayer(cc_tokenizer::string_character_traits<char>::size_type d_model, cc_tokenizer::string_character_traits<char>::size_type num_heads, t dropout_rate) : dimensionsOfTheModel(d_model), dropOutRate(dropout_rate), attention(d_model, num_heads), ffn(d_model, dropout_rate), norm1(d_model), norm2(d_model)
         {                        
         }
         

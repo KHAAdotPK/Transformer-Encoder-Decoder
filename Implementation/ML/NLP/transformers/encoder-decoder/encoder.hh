@@ -54,25 +54,25 @@ class Encoder
          */
         Encoder(cc_tokenizer::string_character_traits<char>::size_type d_model, cc_tokenizer::string_character_traits<char>::size_type num_layers, cc_tokenizer::string_character_traits<char>::size_type num_heads, float dropout_rate) : dimensionsOfTheModel(d_model), numberOfLayers(num_layers), numberOfAttentionHeads(num_heads), dropOutRate(dropout_rate), encoderLayerListHead(NULL)
         {
-            /*ENCODERLAYERLIST_PTR*/EncoderLayerList<t>* current = NULL;  
-
+            /*ENCODERLAYERLIST_PTR*/EncoderLayerList<t>* current = NULL; 
+                        
             for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < numberOfLayers; i++)
             {                                
                 if (current == NULL)
                 {                    
-                    current = reinterpret_cast</*ENCODERLAYERLIST_PTR*/EncoderLayerList<t>*>(cc_tokenizer::allocator<char>().allocate(sizeof(/*ENCODERLAYERLIST*/EncoderLayerList<t>)));
+                    current = new EncoderLayerList<t>(); //reinterpret_cast</*ENCODERLAYERLIST_PTR*/EncoderLayerList<t>*>(cc_tokenizer::allocator<char>().allocate(sizeof(/*ENCODERLAYERLIST*/EncoderLayerList<t>)));
                     encoderLayerListHead = current;
                     current->previous = NULL;                    
                 }
                 else
                 {                 
-                    current->next = reinterpret_cast</*ENCODERLAYERLIST_PTR*/EncoderLayerList<t>*>(cc_tokenizer::allocator<char>().allocate(sizeof(/*ENCODERLAYERLIST*/EncoderLayerList<t>)));
+                    current->next = new EncoderLayerList<t>(); //reinterpret_cast</*ENCODERLAYERLIST_PTR*/EncoderLayerList<t>*>(cc_tokenizer::allocator<char>().allocate(sizeof(/*ENCODERLAYERLIST*/EncoderLayerList<t>)));
                     current->next->previous = current;
                     current = current->next;
                 }
                 
                 current->next = NULL;    
-                current->ptr = new EncoderLayer<t>(dimensionsOfTheModel, numberOfAttentionHeads, dropOutRate);
+                current->ptr = new EncoderLayer<t>(dimensionsOfTheModel, numberOfAttentionHeads, dropOutRate);                
             }                       
         }
 
