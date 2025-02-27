@@ -2,7 +2,7 @@
 
 ![Screen shot of debug information of progress so far](https://github.com/KHAAdotPK/Transformer-Encoder-Decoder/blob/main/Documents/out-put-so-far.png)
 
-The debug output provides a detailed snapshot of the internal state of your model during execution. Here's a breakdown of the key components and observations:
+The debug output provides a detailed snapshot of the internal state of this model during execution. Here's a breakdown of the key components and observations:
 
 ---
 
