@@ -248,6 +248,8 @@ class Model
                     {                        
                         dt[i*dt.getShape().getNumberOfColumns() + j] = std::exp(value);
 
+                        dt[i*dt.getShape().getNumberOfColumns() + j] = dt[i*dt.getShape().getNumberOfColumns() + j] / (t)dm;
+
                         value = value + (t)2;    
                     }
                 }                
@@ -255,6 +257,8 @@ class Model
                 dt = dt * (t)(SCALING_FACTOR(SCALING_FACTOR_CONSTANT, dm));
                 /* Compute sine-transformed position encodings */                
                 Collective<t> sin_transformed_product = Numcy::sin<t>(p * dt);
+                /* Compute cosine-transformed position encodinf */
+                Collective<t> cos_transformed_product = Numcy::cos<t>(p * dt);
                 /* Fill even and odd indices separately */
 #ifdef MAKE_THIS_MODEL_VERBOSE_FOR_POSITION_ENCODING                
                 std::cout<< "sin_transformed_product, Columns: " << sin_transformed_product.getShape().getNumberOfColumns() << ", Rows: " << sin_transformed_product.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
@@ -277,7 +281,7 @@ class Model
                 }
                 for (cc_tokenizer::string_character_traits<char>::size_type i = 1; i < pe.getShape().getN(); i+=2)
                 {
-                    pe[i] = sin_transformed_product[i];
+                    pe[i] = cos_transformed_product[i];
                 }
             }
             catch (std::bad_alloc& e)
