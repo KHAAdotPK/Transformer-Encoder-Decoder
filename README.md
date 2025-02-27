@@ -2,6 +2,8 @@
 
 This repository contains an implementation of the **Transformer encoder-decoder model** from scratch in C++. The goal is to build a sequence-to-sequence model that leverages pre-trained word embeddings (from Skip-gram and CBOW) and incorporates the core components of the Transformer architecture.
 
+> **For detailed insights into the model's input processing, encoder input, and debug output analysis, refer to the [Debug Output Documentation](https://github.com/KHAAdotPK/Transformer-Encoder-Decoder/tree/main/Documents/summary-output-of-progress-so-far.md). This file contains a comprehensive breakdown of the input sequence, mask, position encoding, and encoder input, along with observations and recommendations**.
+
 ---
 
 ## **Progress So Far**

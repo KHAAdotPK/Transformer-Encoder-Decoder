@@ -60,13 +60,13 @@ class Encoder
             {                                
                 if (current == NULL)
                 {                    
-                    current = new EncoderLayerList<t>(); //reinterpret_cast</*ENCODERLAYERLIST_PTR*/EncoderLayerList<t>*>(cc_tokenizer::allocator<char>().allocate(sizeof(/*ENCODERLAYERLIST*/EncoderLayerList<t>)));
+                    current = /*new EncoderLayerList<t>();*/ reinterpret_cast</*ENCODERLAYERLIST_PTR*/EncoderLayerList<t>*>(cc_tokenizer::allocator<char>().allocate(sizeof(/*ENCODERLAYERLIST*/EncoderLayerList<t>)));
                     encoderLayerListHead = current;
                     current->previous = NULL;                    
                 }
                 else
                 {                 
-                    current->next = new EncoderLayerList<t>(); //reinterpret_cast</*ENCODERLAYERLIST_PTR*/EncoderLayerList<t>*>(cc_tokenizer::allocator<char>().allocate(sizeof(/*ENCODERLAYERLIST*/EncoderLayerList<t>)));
+                    current->next = /*new EncoderLayerList<t>();*/ reinterpret_cast</*ENCODERLAYERLIST_PTR*/EncoderLayerList<t>*>(cc_tokenizer::allocator<char>().allocate(sizeof(/*ENCODERLAYERLIST*/EncoderLayerList<t>)));
                     current->next->previous = current;
                     current = current->next;
                 }
