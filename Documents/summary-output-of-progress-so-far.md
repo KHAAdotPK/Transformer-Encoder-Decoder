@@ -23,12 +23,10 @@ The debug output provides a detailed snapshot of the internal state of this mode
      - In this case, only the first element of the sequence is valid, and the other two are padding.
 
 ---
-## **3. Target Sequence (`sin_transformed_product`)**
-   - **Shape:** 3 rows × 64 columns.
+## **3. Target Sequence (`ts(Target Sequence)`), (not important yet)**
+   - **Shape:** .
    - **Values:** Not explicitly shown in the debug output.
    - **Interpretation:**
-     - The target sequence appears to be a transformed version of the input, possibly for a sequence-to-sequence task.
-     - The large number of columns (64) suggests a high-dimensional representation.
 
 ---
 
