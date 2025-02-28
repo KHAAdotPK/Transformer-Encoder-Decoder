@@ -180,13 +180,16 @@ class Model
             m x p                 
             p * mask   
          */
-        void buildPositionEncoding(Collective<t>& p, Collective<t>& pe, Collective<t>& dt, cc_tokenizer::string_character_traits<char>::size_type dm, Collective<t>& is, Collective<t>& mask, cc_tokenizer::string_character_traits<char>::size_type mntpl) throw (ala_exception)
+        void buildPositionEncoding(Collective<t>& p, Collective<t>& pe, Collective<t>& dt, cc_tokenizer::string_character_traits<char>::size_type dm, Collective<t>& is, Collective<t>& mask, cc_tokenizer::string_character_traits<char>::size_type mntpl, Collective<t>& sin_transformed_product, Collective<t>& cos_transformed_product) throw (ala_exception)
         {
             /*
                 Getting ready for placement new.
                 Explicitly destroy old object (optional)
              */
-            p.~Collective();            
+            p.~Collective(); 
+            sin_transformed_product.~Collective();
+            cos_transformed_product.~Collective();
+                       
             //dt.~Collective();
             //pe.~Collective();
             
@@ -248,7 +251,7 @@ class Model
                     {                        
                         dt[i*dt.getShape().getNumberOfColumns() + j] = std::exp(value);
 
-                        dt[i*dt.getShape().getNumberOfColumns() + j] = dt[i*dt.getShape().getNumberOfColumns() + j] / (t)dm;
+                        //dt[i*dt.getShape().getNumberOfColumns() + j] = dt[i*dt.getShape().getNumberOfColumns() + j] / (t)dm;
 
                         value = value + (t)2;    
                     }
@@ -256,12 +259,14 @@ class Model
                 /* Scale dt by a predefined scaling factor */
                 dt = dt * (t)(SCALING_FACTOR(SCALING_FACTOR_CONSTANT, dm));
                 /* Compute sine-transformed position encodings */                
-                Collective<t> sin_transformed_product = Numcy::sin<t>(p * dt);
+                /*Collective<t> sin_transformed_product = Numcy::sin<t>(p * dt);*/
+                new (&sin_transformed_product) Collective<t>(Numcy::sin<t>(p * dt));
                 /* Compute cosine-transformed position encodinf */
-                Collective<t> cos_transformed_product = Numcy::cos<t>(p * dt);
+                /*Collective<t> cos_transformed_product = Numcy::cos<t>(p * dt);*/
+                new (&cos_transformed_product) Collective<t>(Numcy::cos<t>(p * dt));
                 /* Fill even and odd indices separately */
 #ifdef MAKE_THIS_MODEL_VERBOSE_FOR_POSITION_ENCODING                
-                std::cout<< "sin_transformed_product, Columns: " << sin_transformed_product.getShape().getNumberOfColumns() << ", Rows: " << sin_transformed_product.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
+                /*std::cout<< "sin_transformed_product, Columns: " << sin_transformed_product.getShape().getNumberOfColumns() << ", Rows: " << sin_transformed_product.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;*/
 #endif                
                 /* Initialize position encoding tensor with zeros */
                 /*
@@ -276,13 +281,17 @@ class Model
                 //FILL_EVEN_INDICES_OF_POSITION_ENCODING(pe, sin_transformed_product);
                 /* Fill even and odd indices separately */
                 for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < pe.getShape().getN(); i+=2)
-                {
-                    pe[i] = sin_transformed_product[i];
+                {   
+                    //mask[i/pe.getShape().getNumberOfColumns()];                    
+                    pe[i] = sin_transformed_product[i] * mask[i/pe.getShape().getNumberOfColumns()];
                 }
                 for (cc_tokenizer::string_character_traits<char>::size_type i = 1; i < pe.getShape().getN(); i+=2)
                 {
-                    pe[i] = cos_transformed_product[i];
+                    pe[i] = cos_transformed_product[i] * mask[i/pe.getShape().getNumberOfColumns()];
                 }
+
+                // 64 rows, 3 columns                         3 rows and 1 column   
+                //Numcy::transpose(sin_transformed_product) * Numcy::transpose(mask);
             }
             catch (std::bad_alloc& e)
             {
@@ -414,6 +423,8 @@ class Model
 
                     t* ptr = NULL;
                     Collective<t> mask;
+                    Collective<t> sin_transformed_product;
+                    Collective<t> cos_transformed_product;
 
                     try
                     {   
@@ -495,7 +506,7 @@ class Model
 #ifdef MAKE_THIS_MODEL_VERBOSE_FOR_POSITION_ENCODING                                
                                 std::cout<< "::: DEBUG DATA -: Model::buildTargetSequence() :- :::"  << std::endl;
 #endif                                
-                                buildPositionEncoding(p, pe, dt, dm, is, mask, mntpl);
+                                buildPositionEncoding(p, pe, dt, dm, is, mask, mntpl, sin_transformed_product, cos_transformed_product);
 #ifdef MAKE_THIS_MODEL_VERBOSE_FOR_POSITION_ENCODING                                
                                 std::cout<< "::: DEBUG DATA -: (Model::buildPositionEncoding()) for Position Encoding) :- :::"  << std::endl;                                                                                                                                                                
                                 std::cout<< "Transposed(p * mask), Columns: " << p.getShape().getNumberOfColumns() << ", Rows: " << p.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;                                                                
@@ -512,6 +523,40 @@ class Model
                                 {
                                     std::cout<< dt[(k/dt.getShape().getNumberOfColumns())*dt.getShape().getNumberOfColumns() + (k%dt.getShape().getNumberOfColumns())] << " ";
                                     if ((k + 1)%dt.getShape().getNumberOfColumns() == 0)
+                                    {
+                                        std::cout<< std::endl;
+                                    }
+                                }
+                                std::cout<< "sin_transformed_product, Columns: " << sin_transformed_product.getShape().getNumberOfColumns() << ", Rows: " << sin_transformed_product.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
+                                for (int k = 0; k < sin_transformed_product.getShape().getN(); k++)
+                                {
+                                    if (!(k%2))
+                                    {
+                                        std::cout<< sin_transformed_product[(k/sin_transformed_product.getShape().getNumberOfColumns())*sin_transformed_product.getShape().getNumberOfColumns() + (k%sin_transformed_product.getShape().getNumberOfColumns())] << " ";
+                                    }
+                                    else
+                                    {
+                                        std::cout<< " --ODD-- "; 
+                                    }
+
+                                    if ((k + 1)%sin_transformed_product.getShape().getNumberOfColumns() == 0)
+                                    {
+                                        std::cout<< std::endl;
+                                    }
+                                }
+                                std::cout<< "cos_transformed_product, Columns: " << cos_transformed_product.getShape().getNumberOfColumns() << ", Rows: " << cos_transformed_product.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
+                                for (int k = 0; k < cos_transformed_product.getShape().getN(); k++)
+                                {
+                                    if (k%2)
+                                    {
+                                        std::cout<< cos_transformed_product[(k/cos_transformed_product.getShape().getNumberOfColumns())*cos_transformed_product.getShape().getNumberOfColumns() + (k%cos_transformed_product.getShape().getNumberOfColumns())] << " ";
+                                    }
+                                    else
+                                    {
+                                        std::cout<< " --EVEN-- "; 
+                                    }
+
+                                    if ((k + 1)%cos_transformed_product.getShape().getNumberOfColumns() == 0)
                                     {
                                         std::cout<< std::endl;
                                     }

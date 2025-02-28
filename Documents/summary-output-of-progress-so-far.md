@@ -4,78 +4,88 @@
 
 The debug output provides a detailed snapshot of the internal state of this model during execution. Here's a breakdown of the key components and observations:
 
----
+----
+# Evaluation of Code and Output
 
-## **1. Input Sequence (`is(Input Sequence)`)**
-   - **Shape:** 3 rows × 16 columns.
-   - **Values:** The first row contains non-zero values, while the second and third rows are all zeros.
-   - **Interpretation:**
-     - The first row represents the actual input data (e.g., embeddings or features).
-     - The zero rows suggest that the input sequence are padded or incomplete. This is common in sequence-based models like transformers, where inputs are padded to a fixed length.
+## **1. Positional Encoding (`pe`)**:
+- The positional encoding (`pe`) is computed using sine and cosine transformations of the scaled position indices (`p * dt`).
+- The sine values are used for even indices, and cosine values are used for odd indices, which aligns with the standard Transformer positional encoding formula.
+- The output shows that the positional encoding is correctly computed for the first row (real tokens), while the second and third rows (padding tokens) are zeroed out, as expected.
 
----
+## **2. Scaling Term (`dt * SCALING_FACTOR`)**:
+- The scaling term (`dt`) grows exponentially due to the use of `std::exp` and the large `SCALING_FACTOR_CONSTANT` (10000.0).
+- This results in extremely large values (e.g., `-2.05823e+54`), which could lead to numerical instability or overflow issues.
+- **Recommendation**: Normalize `dt` by dividing by the embedding dimension (`dm`) or reduce the `SCALING_FACTOR_CONSTANT` to prevent exponential growth.
 
-## **2. Mask (`mask`)**
-   - **Shape:** 1 row × 3 columns.
-   - **Values:** `[1, 0, 0]`.
-   - **Interpretation:**
-     - The mask indicates which elements of the input sequence are valid (1) and which are padding (0).
-     - In this case, only the first element of the sequence is valid, and the other two are padding.
+## **3. Mask Application**:
+- The mask is correctly applied to zero out padding positions in the positional encoding.
+- The first row of `pe` contains valid positional encodings, while the second and third rows are zeroed out, indicating that padding tokens are correctly ignored.
 
----
-## **3. Target Sequence (`ts(Target Sequence)`), (not important yet)**
-   - **Shape:** .
-   - **Values:** Not explicitly shown in the debug output.
-   - **Interpretation:**
+## **4. Sine and Cosine Transformations**:
+- The sine and cosine transformations (`sin_transformed_product` and `cos_transformed_product`) are computed correctly.
+- The output shows that sine values are used for even indices and cosine values for odd indices, as expected.
 
----
+## **5. Encoder Input (`ei`)**:
+- The encoder input (`ei`) is formed by concatenating the positional encoding (`pe`) and the input sequence (`is`).
+- The output shows that `ei` contains the correct values for the first row (real tokens), while the second and third rows (padding tokens) are zeroed out.
 
-## **4. Position Encoding (`pe`)**
-   - **Shape:** 3 rows × 64 columns.
-   - **Values:**
-     - The first row contains non-zero values, likely representing the position encoding for the valid input.
-     - The second and third rows are all zeros, consistent with the mask indicating padding.
-   - **Interpretation:**
-     - Position encoding is added to the input embeddings to provide information about the position of tokens in the sequence.
-     - The non-zero values in the first row suggest that the position encoding is applied correctly to the valid input.
+## **6. Debug Output**:
+- The debug output is verbose and provides detailed information about the intermediate computations, which is helpful for debugging.
+- However, the exponential growth in `dt * SCALING_FACTOR` is a concern and should be addressed to ensure numerical stability.
 
----
+----
 
-## **5. Encoder Input (`ei`)**
-   - **Shape:** 3 rows × 80 columns.
-   - **Values:**
-     - The first 64 columns represent the position encoding.
-     - The remaining 16 columns might represent trained word embeddings.
-   - **Interpretation:**
-     - The encoder input is a combination of the input sequence, position encoding, and possibly other features.
-     - The second and third rows are all zeros, consistent with the mask indicating padding.
+## **Key Observations**:
+1. **Numerical Stability**:
+   - The exponential growth in `dt * SCALING_FACTOR` is a significant issue. It can lead to numerical instability, overflow, or underflow during training.
+   - **Fix**: Normalize `dt` by dividing by the embedding dimension (`dm`) or reduce the `SCALING_FACTOR_CONSTANT`.
 
----
+2. **Positional Encoding**:
+   - The positional encoding is computed correctly, with sine values for even indices and cosine values for odd indices.
+   - The mask is applied correctly to zero out padding positions.
 
-## **6. Observations and Potential Issues**
-   - **Padding Consistency:**
-     - The mask (`[1, 0, 0]`) indicates that only the first element of the sequence is valid. This is reflected in the input sequence, position encoding, and encoder input, where the second and third rows are all zeros.
-     - This consistency is good and suggests that padding is handled correctly.
-   - **Position Encoding:**
-     - The position encoding values in the first row are non-zero, which is expected. However, the values in the second and third rows are all zeros, which is correct given the mask.
-   - **Large Values in `dt * SCALING_FACTOR`:**
-     - The values in `dt * SCALING_FACTOR` are extremely large (e.g., `-2.05823e+54`). This could indicate:
-       - A potential issue with the scaling factor or the calculation of `dt`.
-       - Numerical instability, which could lead to overflow or underflow during training.
-     - **Recommendation:** Check the scaling factor and ensure that the values are within a reasonable range for numerical stability.
+3. **Encoder Input**:
+   - The encoder input (`ei`) is formed correctly by concatenating the positional encoding (`pe`) and the input sequence (`is`).
 
----
+4. **Padding Handling**:
+   - Padding tokens are correctly ignored, as evidenced by the zeroed-out rows in `pe` and `ei`.
 
-## **7. General Comments**
-   - **Debug Output Clarity:**
-     - The debug output is well-structured and provides a clear view of the internal state of the model.
-     - Including shapes (rows and columns) is particularly helpful for understanding the data flow.
-   - **Potential Improvements:**
-     - **Numerical Stability:** Investigate the large values in `dt * SCALING_FACTOR` to ensure they do not cause instability during training.
-     - **Verbosity:** Consider adding more context to the debug output, such as the purpose of each tensor (e.g., "Position Encoding for Valid Input").
-     - **Error Handling:** Ensure that the model handles edge cases, such as empty sequences or invalid masks, gracefully.
+----
 
----
+## **Recommendations**:
+1. **Normalize `dt`**:
+   - Modify the computation of `dt` to prevent exponential growth:
+     ```cpp
+     dt[i * dt.getShape().getNumberOfColumns() + j] = std::exp(value) / (t)dm;
+     ```
 
-## **Summary**
-The debug output indicates that the model is processing the input sequence, mask, and position encoding correctly. However, the extremely large values in `dt * SCALING_FACTOR` warrant further investigation to ensure numerical stability. Overall, the debug output is clear and provides valuable insights into the model's internal state.
+2. **Reduce `SCALING_FACTOR_CONSTANT`**:
+   - Experiment with smaller values of `SCALING_FACTOR_CONSTANT` (e.g., 1000.0 or 100.0) to reduce the rate of exponential growth.
+
+3. **Gradient Clipping**:
+   - Use gradient clipping during training to prevent exploding gradients caused by large values in the positional encoding.
+
+4. **Debugging**:
+   - Continue using verbose debug output to monitor the values of `dt`, `pe`, and `ei` during training.
+   - Check for NaNs or infinities in the model's outputs to ensure numerical stability.
+
+----
+
+## **Conclusion**:
+The code is functionally correct and aligns with the standard Transformer architecture. However, the exponential growth in `dt * SCALING_FACTOR` is a critical issue that needs to be addressed to ensure numerical stability. By normalizing `dt` or reducing the scaling factor, you can prevent numerical instability and improve the robustness of the model. 
+
+----
+
+
+
+
+
+
+
+
+
+
+
+
+
+
