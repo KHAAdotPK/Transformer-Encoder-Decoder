@@ -77,16 +77,20 @@ class Encoder
         }
 
         /*template <typename t = float>*/
-        void forward(Collective<t>& ei)
+        Collective<t> forward(Collective<t>& ei)
         {
             /*ENCODERLAYERLIST_PTR*/EncoderLayerList<t>* current = encoderLayerListHead;
 
+            Collective<t> output;
+
             while (current != NULL)
             {
-                current->ptr->forward(ei);
+                output = current->ptr->forward(ei);
 
                 current = current->next;                    
-            }           
+            }
+            
+            return output;
         }
 
         ~Encoder(void)        

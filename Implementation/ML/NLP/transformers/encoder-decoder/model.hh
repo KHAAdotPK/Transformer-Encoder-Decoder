@@ -585,7 +585,7 @@ class Model
                                 }
 
                                 Encoder<t> encoder(ei.getShape().getNumberOfColumns(), DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER);
-                                encoder.forward(ei);                                
+                                Collective<t> output = encoder.forward(ei);                                
                                 std::cout<< "*++++++++++++++++++++++++++++++++++++++*" << std::endl;
 
                                 /* Reinitialize, input sequence and input sequence mask */

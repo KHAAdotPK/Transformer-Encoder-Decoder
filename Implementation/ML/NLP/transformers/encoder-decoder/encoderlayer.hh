@@ -63,7 +63,7 @@ class EncoderLayer
         {                        
         }
         
-        void forward(Collective<t>& ei)
+        Collective<t> forward(Collective<t>& ei)
         {
             /*
                 The output of MULTIHEADATTENTION::forward() is typically a transformed representation of the input sequence, where each token's representation has been updated based on attention over all tokens in the sequence. In a Transformer encoder, this output is usually processed further in the following steps:
@@ -109,6 +109,8 @@ class EncoderLayer
             {
                 throw ala_exception(cc_tokenizer::String<char>("EncoderLayer::forward() -> ") + cc_tokenizer::String<char>(e.what()));
             }
+
+            return output;
         }
 
         ~EncoderLayer()
