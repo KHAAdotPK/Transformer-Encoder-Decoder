@@ -104,6 +104,8 @@ class EncoderLayer
                     Read more about in the comment section of MULTIHEADATTENTION::forward()
                 */                           
                 output = attention.forward(ei, ei, ei);
+
+                norm1.forward(output);
             }
             catch(ala_exception& e)
             {

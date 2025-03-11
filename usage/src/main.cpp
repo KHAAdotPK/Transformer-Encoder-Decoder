@@ -143,7 +143,7 @@ int main(int argc, char* argv[])
     try
     {         
         W1 = Collective<double>{NULL, DIMENSIONS{SKIP_GRAM_EMBEDDNG_VECTOR_SIZE, input_sequence_vocab.numberOfUniqueTokens(), NULL, NULL}};   
-        READ_W_BIN(W1, file_name_w1, double);        
+        READ_W_BIN_NEW_ONE(W1, file_name_w1, double);
     }
     catch (ala_exception& e)
     {
