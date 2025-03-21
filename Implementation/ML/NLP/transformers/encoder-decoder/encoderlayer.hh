@@ -105,7 +105,7 @@ class EncoderLayer
                 */                           
                 output = attention.forward(ei, ei, ei);
 
-                norm1.forward(output);
+                output = norm1.forward(output);
             }
             catch(ala_exception& e)
             {

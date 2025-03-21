@@ -8,16 +8,21 @@
 #ifndef NLP_ENCODER_DECODER_TRANSFORMER_MODEL_ENCODER_LAYER_NORMALIZATION_HH
 #define NLP_ENCODER_DECODER_TRANSFORMER_MODEL_ENCODER_LAYER_NORMALIZATION_HH
 
+// Epsilon, arbitrarily small positive quantity(small or close to zero)
+#define ENCODER_LAYER_NORMALIZATION_EPSILON_VALUE (1e-6)
+
 template <typename t = double>
 class EncoderLayerNormalization
 {
+    t epsilon;
     cc_tokenizer::string_character_traits<char>::size_type dimensionsOfTheModel;
     Collective<t> gamma, beta;
 
     public:
-        EncoderLayerNormalization(cc_tokenizer::string_character_traits<char>::size_type d_model) throw (ala_exception)
+        EncoderLayerNormalization(cc_tokenizer::string_character_traits<char>::size_type d_model, t eps = ENCODER_LAYER_NORMALIZATION_EPSILON_VALUE) throw (ala_exception)
         {
             dimensionsOfTheModel = d_model;
+            epsilon = eps;
 
             try
             {            
@@ -36,7 +41,7 @@ class EncoderLayerNormalization
             }
         }
 
-        void forward(Collective<t>& input) throw (ala_exception)
+        Collective<t> forward(Collective<t>& input) throw (ala_exception)
         {
             /*
                 Layer Normalization Formula:
@@ -55,6 +60,8 @@ class EncoderLayerNormalization
 
             Collective<t> input_mean, input_variance, input_normalized;
             Collective<t> input_dispersion, input_variance_stabilized;
+
+            Collective<t> output;
 
             try
             {                
@@ -89,8 +96,7 @@ class EncoderLayerNormalization
                 }    
                 std::cout<< "\n ---- - -- - - - - - - -- - - - - - - -- -  ----- ----  " << std::endl;*/
 
-
-                input_variance_stabilized = input_variance + (t)(1e-6);                
+                input_variance_stabilized = input_variance + /*(t)(1e-6)*/ std::max(input_variance[0], epsilon);                
                 input_normalized = input_dispersion / Numcy::sqrt(input_variance_stabilized);
 
                 /*std::cout<< "\n ---- - -- - - - - - - -- - - - - - - -- -  ----- ----  " << std::endl;
@@ -117,7 +123,7 @@ class EncoderLayerNormalization
                 
                 std::cout<< "input (columns) = " << input.getShape().getNumberOfColumns() << ", " << input.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;*/ 
                 
-                input = gamma * input_normalized + beta;
+                output = gamma * input_normalized + beta;
             }
             catch(ala_exception& e)
             {                
@@ -184,6 +190,8 @@ class EncoderLayerNormalization
             } 
             
             std::cout<< std::endl;*/
+
+            return output;
         }
 };
 

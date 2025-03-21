@@ -21,7 +21,9 @@ class Encoder
     t dropOutRate;
 
     public:
-        Encoder(void) : dimensionsOfTheModel(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER), numberOfLayers(DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER), numberOfAttentionHeads(DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER), dropOutRate(DEFAULT_DROP_OUT_RATE_HYPERPARAMETER), encoderLayerListHead(NULL)
+
+        // Default constructor
+        Encoder(void) : dimensionsOfTheModel(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER), numberOfLayers(DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER), numberOfAttentionHeads(DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER), encoderLayerListHead(NULL), dropOutRate(DEFAULT_DROP_OUT_RATE_HYPERPARAMETER)
         {
             /*ENCODERLAYERLIST_PTR*/ EncoderLayerList<t>* current = NULL;
                                     
@@ -45,6 +47,7 @@ class Encoder
             }                       
         }
         
+        // Parameterized Constructor
         /*
             All arguments are "hyperparameters". Learn more about them in DOCUMENTS/hyperparameters.md
             @d_model, the dimension of the embedding space. Like Weights of NN determines the capacity and expressive power of the model.
@@ -52,8 +55,15 @@ class Encoder
             @num_heads, the number of atention heads. 
             @dropout_rate, it represents the probability of randomly "dropping out" or deactivating units (neurons) in a layer/encoder. Typically set between 0.1 and 0.5.
          */
-        Encoder(cc_tokenizer::string_character_traits<char>::size_type d_model, cc_tokenizer::string_character_traits<char>::size_type num_layers, cc_tokenizer::string_character_traits<char>::size_type num_heads, float dropout_rate) : dimensionsOfTheModel(d_model), numberOfLayers(num_layers), numberOfAttentionHeads(num_heads), dropOutRate(dropout_rate), encoderLayerListHead(NULL)
+        Encoder(cc_tokenizer::string_character_traits<char>::size_type d_model, cc_tokenizer::string_character_traits<char>::size_type num_layers, cc_tokenizer::string_character_traits<char>::size_type num_heads, t dropout_rate) : dimensionsOfTheModel(d_model), numberOfLayers(num_layers), numberOfAttentionHeads(num_heads), encoderLayerListHead(NULL), dropOutRate(dropout_rate)
         {
+            if (dropout_rate < 0.0 || dropout_rate > 1.0)
+            {
+                dropout_rate = DEFAULT_DROP_OUT_RATE_HYPERPARAMETER;
+                
+                std::cerr << "Encoder::Encoder() Warning: Invalid dropout_rate provided (" << dropout_rate << "). " << "The dropout_rate must be between 0.0 and 1.0. " << "Using default value: " << DEFAULT_DROP_OUT_RATE_HYPERPARAMETER << "." << std::endl;
+            }
+
             /*ENCODERLAYERLIST_PTR*/EncoderLayerList<t>* current = NULL; 
                         
             for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < numberOfLayers; i++)
@@ -76,16 +86,23 @@ class Encoder
             }                       
         }
 
+        /*
+            Forward Pass
+            ---------------
+            The forward method propagates the input(encoder input) through all encoder layers
+            @ei, encoder input
+            @return, the output of the last encoder layer
+         */
         /*template <typename t = float>*/
-        Collective<t> forward(Collective<t>& ei)
+        Collective<t> forward(Collective<t>& ei) const
         {
             /*ENCODERLAYERLIST_PTR*/EncoderLayerList<t>* current = encoderLayerListHead;
 
-            Collective<t> output;
+            Collective<t> output = ei;
 
             while (current != NULL)
             {
-                output = current->ptr->forward(ei);
+                output = current->ptr->forward(output);
 
                 current = current->next;                    
             }
