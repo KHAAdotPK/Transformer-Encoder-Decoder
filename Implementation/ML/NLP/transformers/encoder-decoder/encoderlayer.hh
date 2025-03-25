@@ -51,7 +51,8 @@ class EncoderLayer
     t dropOutRate;
 
     public:
-        EncoderLayer() : dimensionsOfTheModel(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER), numberOfAttentionHeads(DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER), dropOutRate(DEFAULT_DROP_OUT_RATE_HYPERPARAMETER), attention(), ffn(dimensionsOfTheModel, dropOutRate), norm1(dimensionsOfTheModel), norm2(dimensionsOfTheModel)
+        //EncoderLayer() : dimensionsOfTheModel(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER), numberOfAttentionHeads(DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER), dropOutRate(DEFAULT_DROP_OUT_RATE_HYPERPARAMETER), attention(), ffn(dimensionsOfTheModel, dropOutRate), norm1(dimensionsOfTheModel), norm2(dimensionsOfTheModel)
+        EncoderLayer() :  attention(), ffn(dimensionsOfTheModel, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER), norm1(dimensionsOfTheModel), norm2(dimensionsOfTheModel), dimensionsOfTheModel(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER), numberOfAttentionHeads(DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER), dropOutRate(DEFAULT_DROP_OUT_RATE_HYPERPARAMETER) 
         {            
         }
         /*
@@ -59,7 +60,8 @@ class EncoderLayer
             @num_heads, Number of attention heads. 
             @dropout_rate, Dropout rate for regularization. The dropout_rate in the Transformer model is a regularization technique to prevent overfitting.
          */
-        EncoderLayer(cc_tokenizer::string_character_traits<char>::size_type d_model, cc_tokenizer::string_character_traits<char>::size_type num_heads, t dropout_rate) : dimensionsOfTheModel(d_model), dropOutRate(dropout_rate), attention(d_model, num_heads), ffn(d_model, dropout_rate), norm1(d_model), norm2(d_model)
+        //EncoderLayer(cc_tokenizer::string_character_traits<char>::size_type d_model, cc_tokenizer::string_character_traits<char>::size_type num_heads, t dropout_rate) : dimensionsOfTheModel(d_model), dropOutRate(dropout_rate), attention(d_model, num_heads), ffn(d_model, dropout_rate), norm1(d_model), norm2(d_model)
+        EncoderLayer(cc_tokenizer::string_character_traits<char>::size_type d_model, cc_tokenizer::string_character_traits<char>::size_type num_heads, t dropout_rate) : attention(d_model, num_heads), ffn(d_model, dropout_rate), norm1(d_model), norm2(d_model), dimensionsOfTheModel(d_model), numberOfAttentionHeads(num_heads), dropOutRate(dropout_rate)
         {                        
         }
         
@@ -77,7 +79,7 @@ class EncoderLayer
                 2. Apply Layer Normalization
                    - After adding a residual connection (if applicable), the output is normalized.
                    - In this implementation it correspondes to EncoderLayerNormalization::forward():
-                     ENCODERLayerNormlization::forward(output);
+                     EncoderLayerNormlization::forward(output);
                 
                 3. Add Residual Connection (Optional, but Important in Transformer)
                    - If this is a standard Transformer encoder implementation, then add a residual connection before applying layer normalization.
@@ -103,9 +105,17 @@ class EncoderLayer
 
                     Read more about in the comment section of MULTIHEADATTENTION::forward()
                 */                           
-                output = attention.forward(ei, ei, ei);
+                output = attention.forward(ei, ei, ei); // Residual connection around attention
+                output = ei + output; // Residual connection around attention
 
-                output = norm1.forward(output);
+                output = norm1.forward(output); // Layer normalization
+
+                /*
+                    output = output + ffn.forward(output); // Residual connection around FFN                    
+                 */
+                ffn.forward(output);
+                
+                output = norm2.forward(output); // Layer normalization
             }
             catch(ala_exception& e)
             {
