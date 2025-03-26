@@ -18,7 +18,7 @@
     3. Another linear transformation that reduces the dimension back to d_model.
 
     Mathematically, the FFN operates as follows: FFN(x) = max(0, xW_1 + b_1)W_2 + b_2
-                                         .OR. 
+                                        ...OR... 
     FFN(input) = Numcy::matmul(ReLU(0, (Numcy::matmul(input, weights1) + bias1)), weights2) + bias2
 
     - W_1 (weights1) has shape (d_model, 4 * d_model), which expands the representation.
@@ -35,6 +35,22 @@ template <typename t = double>
 class EncoderFeedForwardNetwork 
 {
     cc_tokenizer::string_character_traits<char>::size_type dimensionsOfTheModel;
+    /*
+        Dropout Rate and Its Function in Neural Networks
+        ---------------------------------------------------
+        Dropout is a regularization technique used in neural networks to prevent overfitting by randomly deactivating (setting to zero) a fraction of the neurons during training.
+
+        Dropout Rate (dropOutRate)
+        -----------------------------
+        - It is a probability value (typically between 0 and 1), representing the fraction of neurons to drop
+        - A dropout rate of 0.1 means 10% of neurons are randomly set to zero during training
+
+        Function of Dropout Rate
+        ---------------------------
+        - Prevents Overfitting → Forces the network to learn redundant representations, making it more generalizable
+        - Adds Noise → The network becomes robust to small changes in input
+        - Works Only During Training → During inference, dropout is disabled, and neuron outputs are scaled accordingly
+     */
     t dropOutRate;
     Collective<t> weights1, weights2, bias1, bias2;
 
@@ -78,8 +94,8 @@ class EncoderFeedForwardNetwork
 
         void forward(Collective<t>& input)
         {
-            std::cout<< "input columns = " << input.getShape().getNumberOfColumns() << ", " << input.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
-            std::cout<< "weights1 columns = " << weights1.getShape().getNumberOfColumns() << ", " << weights1.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
+            //std::cout<< "input columns = " << input.getShape().getNumberOfColumns() << ", " << input.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
+            //std::cout<< "weights1 columns = " << weights1.getShape().getNumberOfColumns() << ", " << weights1.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
 
             try
             {                                        
@@ -93,15 +109,15 @@ class EncoderFeedForwardNetwork
                 input = Numcy::matmul(input, weights2) + bias2;  
                 
                 // Optional Dropout (if implemented in Numcy)
+                if (dropOutRate > 0)
+                {
+                    input = Numcy::dropout(input, dropOutRate);
+                }
             }
             catch (ala_exception& e)
             {                
                 throw ala_exception(cc_tokenizer::String<char>("EncoderFeedForwardNetwork::forward() -> ") + cc_tokenizer::String<char>(e.what()));
-            }
-
-            /*input = relu(matmul(input, weights1) + bias1);
-            input = matmul(input, weights2) + bias2;*/
-            // Apply dropout
+            }            
         }
 };
 
