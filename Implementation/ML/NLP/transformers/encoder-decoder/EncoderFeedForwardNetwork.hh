@@ -92,32 +92,36 @@ class EncoderFeedForwardNetwork
             bias2 = Numcy::Random::randn<t>(DIMENSIONS{d_model, 1, NULL, NULL});
         }
 
-        void forward(Collective<t>& input)
+        Collective<t> forward(Collective<t>& input)
         {
             //std::cout<< "input columns = " << input.getShape().getNumberOfColumns() << ", " << input.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
             //std::cout<< "weights1 columns = " << weights1.getShape().getNumberOfColumns() << ", " << weights1.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
 
+            Collective<t> local_input = input;
+
             try
             {                                        
                 // First Linear Transformation
-                input = Numcy::matmul(input, weights1) + bias1;
+                local_input = Numcy::matmul(local_input, weights1) + bias1;
 
                 // Apply ReLU Activation Function. ReLU, short for Rectified Linear Unit                                
-                input = Numcy::ReLU(input);
+                local_input = Numcy::ReLU(local_input);
 
                 // Second Linear Transformation
-                input = Numcy::matmul(input, weights2) + bias2;  
+                local_input = Numcy::matmul(local_input, weights2) + bias2;  
                 
                 // Optional Dropout (if implemented in Numcy)
                 if (dropOutRate > 0)
                 {
-                    input = Numcy::dropout(input, dropOutRate);
+                    local_input = Numcy::dropout(local_input, dropOutRate);
                 }
             }
             catch (ala_exception& e)
             {                
                 throw ala_exception(cc_tokenizer::String<char>("EncoderFeedForwardNetwork::forward() -> ") + cc_tokenizer::String<char>(e.what()));
-            }            
+            }
+            
+            return local_input;
         }
 };
 

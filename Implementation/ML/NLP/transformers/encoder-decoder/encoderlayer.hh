@@ -110,11 +110,21 @@ class EncoderLayer
 
                 output = norm1.forward(output); // Layer normalization
 
+                // ************************************************************************************ //
+                //  The following commented statement has been replaced with the two statements below.  //
+                //  This change was made due to the reason explained in the comment block of the        //
+                //  operator+ overloaded method in the Numcy::Collective parameter class.               //
+                // ************************************************************************************ //
                 /*
                     output = output + ffn.forward(output); // Residual connection around FFN                    
                  */
-                ffn.forward(output);
+                // The output of the feed-forward network is added to the input of the feed-forward network (output) to create a residual connection.
+                // This residual connection helps the model learn better by allowing gradients to flow more easily during backpropagation
+                // and helps mitigate the vanishing gradient problem.         
+                Collective<t> residual = ffn.forward(output); // Feed-forward network output
+                output = output + residual; // Residual connection around FFN
                 
+                // The output of the feed-forward network is then passed through layer normalization to stabilize the training process.
                 output = norm2.forward(output); // Layer normalization
             }
             catch(ala_exception& e)

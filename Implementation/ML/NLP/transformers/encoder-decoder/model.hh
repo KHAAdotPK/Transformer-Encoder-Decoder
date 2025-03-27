@@ -583,9 +583,18 @@ class Model
                                         std::cout<< std::endl;
                                     }
                                 }
-
-                                Encoder<t> encoder(ei.getShape().getNumberOfColumns(), DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER);
-                                Collective<t> output = encoder.forward(ei);                                
+                                Encoder<t> encoder(ei.getShape().getNumberOfColumns(), DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER);                                
+                                Collective<t> eo = encoder.forward(ei);
+                                std::cout<< "::: DEBUG DATA -: Encoder Output(eo) :- :::"  << std::endl;
+                                std::cout<< "Columns: " << eo.getShape().getNumberOfColumns() << ", Rows: " << eo.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
+                                for (int k = 0; k < eo.getShape().getN(); k++)
+                                {
+                                    std::cout<< eo[(k/eo.getShape().getNumberOfColumns())*eo.getShape().getNumberOfColumns() + (k%eo.getShape().getNumberOfColumns())] << " ";
+                                    if ((k + 1)%eo.getShape().getNumberOfColumns() == 0)
+                                    {
+                                        std::cout<< std::endl;
+                                    }
+                                }
                                 std::cout<< "*++++++++++++++++++++++++++++++++++++++*" << std::endl;
 
                                 /* Reinitialize, input sequence and input sequence mask */
