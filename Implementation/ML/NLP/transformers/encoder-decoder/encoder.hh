@@ -98,8 +98,10 @@ class Encoder
         {
             /*ENCODERLAYERLIST_PTR*/EncoderLayerList<t>* current = encoderLayerListHead;
 
-            Collective<t> output = ei;
-
+            Collective<t> output = ei;  
+            
+            //AD_HOC_DEBUG_MACRO(output);
+            
             while (current != NULL)
             {
                 output = current->ptr->forward(output);

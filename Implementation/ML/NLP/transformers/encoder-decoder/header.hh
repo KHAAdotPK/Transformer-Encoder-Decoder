@@ -9,6 +9,72 @@
 #define NLP_ENCODER_DECODER_TRANSFORMER_MODEL_HEADER_HH
 
 /*
+    ADHOC_IMPLEMENTATION_OF_MASK(instance, mask)
+
+    This macro applies a masking operation on `instance` based on the values in `mask`.
+
+    Parameters:
+    - instance: A tensor or matrix-like structure with a defined shape.
+    - mask: A binary vector (or array) where:
+        - `mask[i] == 0` means the corresponding row in `instance` should be zeroed out.
+        - `mask[i] == 1` means the row remains unchanged.
+
+    Algorithm:
+    1. Iterate over all elements in `instance` using `k`, which represents a flattened index.
+    2. When reaching the last column of a row (`(k + 1) % instance.getShape().getNumberOfColumns() == 0`):
+        - Determine the corresponding row index (`k / instance.getShape().getNumberOfColumns()`).
+        - If `mask[row_index] == 0`, zero out all elements in that row.
+    3. Skip ahead by a full row (`k += instance.getShape().getNumberOfColumns()`) after modifying a row.
+
+    Notes:
+    - The macro ensures that if a row is marked by `mask` as zero, all its elements are explicitly set to `0`.
+    - The use of `cc_tokenizer::string_character_traits<char>::size_type l` for looping over columns ensures compatibility with various data types.
+    - The macro modifies `instance` in-place, meaning it directly alters the input tensor/matrix.
+
+    Example:
+        Given `instance` as:
+            [[1, 2, 3],
+             [4, 5, 6],
+             [7, 8, 9]]
+        and `mask = [1, 0, 1]`,
+        after applying the macro:
+            [[1, 2, 3],
+             [0, 0, 0],  // This row is zeroed out because mask[1] == 0
+             [7, 8, 9]]
+*/
+#define ADHOC_IMPLEMENTATION_OF_MASK(instance, mask)\
+{\
+    for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < instance.getShape().getN(); k++)\
+    {\
+        if ((k + 1)%instance.getShape().getNumberOfColumns() == 0)\
+        {\
+            if (mask[(k/instance.getShape().getNumberOfColumns())] == 0)\
+            {\
+                for (cc_tokenizer::string_character_traits<char>::size_type l = 0; l < instance.getShape().getNumberOfColumns(); l++)\
+                {\
+                    instance[(k/instance.getShape().getNumberOfColumns())*instance.getShape().getNumberOfColumns() + l] = 0;\
+                }\
+                k = k + instance.getShape().getNumberOfColumns();\
+            }\
+        }\
+    }\
+}\
+
+#define ADHOC_DEBUG_MACRO(instance)\
+{\
+    std::cout<< " &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& \n";\
+    for (int k = 0; k < instance.getShape().getN(); k++)\
+    {\
+        std::cout<< instance[(k/instance.getShape().getNumberOfColumns())*instance.getShape().getNumberOfColumns() + (k%instance.getShape().getNumberOfColumns())] << " ";\
+        if ((k + 1)%instance.getShape().getNumberOfColumns() == 0)\
+        {\
+            std::cout<< std::endl;\
+        }\
+    }\
+    std::cout<< " &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& \n";\
+}\
+
+/*
     In transformers, a common technique for incorporating sequence information is by adding positional encodings to the input embeddings.
     The positional encodings are generated using sine and cosine functions of different frequencies.
     The expression wrapped in the following macro is used to scale the frequency of the sinusoidal functions used to generate positional encodings. 

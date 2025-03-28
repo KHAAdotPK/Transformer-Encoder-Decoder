@@ -585,8 +585,59 @@ class Model
                                 }
                                 Encoder<t> encoder(ei.getShape().getNumberOfColumns(), DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER);                                
                                 Collective<t> eo = encoder.forward(ei);
+                                                                
+                                /*                                    
+                                    In the encoder input, rows (or lines) containing all zeros represent sequences with fewer tokens. 
+                                    These rows typically arise due to padding when processing variable-length sequences.
+
+                                    Issue:
+                                    - During the encoding process, these initially all-zero rows may start containing non-zero values.
+                                    - The exact reason for this is not yet fully identified, but possible causes include:
+                                    1. **Unintended weight initialization effects**: 
+                                        - Some layers may apply transformations that introduce small non-zero values.
+                                          EncoderFeedForwardNetwork class contains biases (bias1 and bias2), which are added to the transformed input.
+                                          This means that even if the input is entirely zero, the biases can introduce nonzero values
+
+                                    2. **Layer normalization or residual connections**: 
+                                        - Some architectures (e.g., Transformer-based models) use residual connections or 
+                                          normalization layers that may propagate non-zero values, even for padded rows.
+                                          For example in EncoderFeedForwardNetwork class, we have following statements...
+                                          // First Linear Transformation
+                                          local_input = Numcy::matmul(local_input, weights1) + bias1;
+                                          // Apply ReLU Activation Function. ReLU, short for Rectified Linear Unit                                
+                                          local_input = Numcy::ReLU(local_input);
+                                          // Second Linear Transformation
+                                          local_input = Numcy::matmul(local_input, weights2) + bias2;  
+
+                                    3. **Self-attention operations**: 
+                                        - If masking isn't applied correctly, self-attention may allow interactions 
+                                          between padded and non-padded sequences, introducing non-zero values.
+                                          In Attention::forward() we've the following statement...
+                                          // Compute scaled dot-product attention scores
+                                          scores = Numcy::matmul<t>(query, Numcy::transpose(key)); // scaleFactor
+                                          The above statement and other statements in the same method may
+                                          propagate non-zero values to zero-padded sequences if masking is not
+                                          correctly applied before the softmax operation
+
+                                    4. **Floating-point precision errors**: 
+                                        - Certain operations, such as matrix multiplications, may lead to very small 
+                                          non-zero values due to numerical precision issues.
+                                          (Possible cause: Feed Forward Network & matrix multiplications)  
+                                            - Even when theoretically all-zero inputs pass through a linear layer (`W * X + b`) = FFN,  
+                                            floating-point arithmetic may introduce small non-zero values due to numerical imprecision.  
+                                            - Feed Forward Networks (`FFN`) with `ReLU` activations can also introduce minor deviations  
+                                            when handling zero vectors
+
+                                    ADHOC Solution:
+                                        - To maintain the integrity of the original input, it is crucial to ensure that any row 
+                                          that was originally all zeros remains all zeros throughout the encoding process.
+                                        - The following statement explicitly enforces this constraint by applying a masking operation
+                                 */
+                                ADHOC_IMPLEMENTATION_OF_MASK(eo, mask);
+
                                 std::cout<< "::: DEBUG DATA -: Encoder Output(eo) :- :::"  << std::endl;
                                 std::cout<< "Columns: " << eo.getShape().getNumberOfColumns() << ", Rows: " << eo.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
+                                /*std::cout<< "Columns: " << mask.getShape().getNumberOfColumns() << ", Rows: " << mask.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;*/
                                 for (int k = 0; k < eo.getShape().getN(); k++)
                                 {
                                     std::cout<< eo[(k/eo.getShape().getNumberOfColumns())*eo.getShape().getNumberOfColumns() + (k%eo.getShape().getNumberOfColumns())] << " ";

@@ -90,6 +90,10 @@ class EncoderFeedForwardNetwork
             weights2 = Numcy::Random::randn<t>(dim2);
             bias1 = Numcy::Random::randn<t>(DIMENSIONS{4 * d_model, 1, NULL, NULL});
             bias2 = Numcy::Random::randn<t>(DIMENSIONS{d_model, 1, NULL, NULL});
+
+            /*bias1 = Numcy::zeros<t>(DIMENSIONS{4 * d_model, 1, NULL, NULL});
+            bias2 = Numcy::zeros<t>(DIMENSIONS{d_model, 1, NULL, NULL});*/
+            
         }
 
         Collective<t> forward(Collective<t>& input)
@@ -110,7 +114,10 @@ class EncoderFeedForwardNetwork
                 // Second Linear Transformation
                 local_input = Numcy::matmul(local_input, weights2) + bias2;  
                 
-                // Optional Dropout (if implemented in Numcy)
+                /*
+                    Optional Dropout (if implemented in Numcy)
+                    Dropout is usually disabled during inference
+                 */
                 if (dropOutRate > 0)
                 {
                     local_input = Numcy::dropout(local_input, dropOutRate);
