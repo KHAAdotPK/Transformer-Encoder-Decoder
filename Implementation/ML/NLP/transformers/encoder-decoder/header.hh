@@ -42,27 +42,51 @@
              [0, 0, 0],  // This row is zeroed out because mask[1] == 0
              [7, 8, 9]]
 */
-#define ADHOC_IMPLEMENTATION_OF_MASK(instance, mask)\
+#define ADHOC_IMPLEMENTATION_OF_MASK_QUERY(instance, mask)\
 {\
-    for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < instance.getShape().getN(); k++)\
+    try\
     {\
-        if ((k + 1)%instance.getShape().getNumberOfColumns() == 0)\
+        for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < instance.getShape().getDimensionsOfArray().getNumberOfInnerArrays(); k++)\
         {\
-            if (mask[(k/instance.getShape().getNumberOfColumns())] == 0)\
+            if (mask[k] == 0)\
             {\
                 for (cc_tokenizer::string_character_traits<char>::size_type l = 0; l < instance.getShape().getNumberOfColumns(); l++)\
                 {\
-                    instance[(k/instance.getShape().getNumberOfColumns())*instance.getShape().getNumberOfColumns() + l] = 0;\
+                    instance[k*instance.getShape().getNumberOfColumns() + l] = std::numeric_limits<t>::lowest() /*0*/;\
                 }\
-                k = k + instance.getShape().getNumberOfColumns();\
             }\
         }\
+    }\
+    catch (ala_exception& e)\
+    {\
+        throw ala_exception(cc_tokenizer::String<char>("ADDHOC_IMPLEMENTATION_OF_MASK() -> ") + cc_tokenizer::String<char>(e.what()));\
+    }\
+}\
+
+#define ADHOC_IMPLEMENTATION_OF_MASK_KEY(instance, mask)\
+{\
+    try\
+    {\
+        for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < mask.getShape().getNumberOfColumns(); k++)\
+        {\
+            if (mask[k] == 0)\
+            {\
+                for (cc_tokenizer::string_character_traits<char>::size_type l = 0; l < instance.getShape().getDimensionsOfArray().getNumberOfInnerArrays(); l++)\
+                {\
+                    instance[l*instance.getShape().getNumberOfColumns() + k] = std::numeric_limits<t>::lowest() /*0*/;\
+                }\
+            }\
+        }\
+    }\
+    catch (ala_exception& e)\
+    {\
+        throw ala_exception(cc_tokenizer::String<char>("ADDHOC_IMPLEMENTATION_OF_MASK() -> ") + cc_tokenizer::String<char>(e.what()));\
     }\
 }\
 
 #define ADHOC_DEBUG_MACRO(instance)\
 {\
-    std::cout<< " &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& \n";\
+    std::cout<< "::: ADHOC DEBUG DATA -: Columns: " << instance.getShape().getNumberOfColumns() << ", Rows: " << instance.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << " :- :::"  << std::endl;\
     for (int k = 0; k < instance.getShape().getN(); k++)\
     {\
         std::cout<< instance[(k/instance.getShape().getNumberOfColumns())*instance.getShape().getNumberOfColumns() + (k%instance.getShape().getNumberOfColumns())] << " ";\
@@ -71,7 +95,6 @@
             std::cout<< std::endl;\
         }\
     }\
-    std::cout<< " &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& \n";\
 }\
 
 /*

@@ -1,5 +1,6 @@
 /*
-    ML/NLP/transformers/encoder-decoder/attention.hh 
+    ML/NLP/transformers/encoder-decoder/attention.hh
+    Multi-head attention implementation in the encoder of a sequence-to-sequence Transformer model
     Q@khaa.pk
  */
 
@@ -14,9 +15,11 @@
 template <typename t = double>
 class Attention // is all you need.
 {
-    cc_tokenizer::string_character_traits<char>::size_type dimensionsOfAttentionHead, dimensionsOfTheModel, numberOfAttentionHeads;
+    cc_tokenizer::string_character_traits<char>::size_type dimensionsOfAttentionHead /* Size of each attention head (d_model/num_heads) */ , dimensionsOfTheModel /* Model dimension (d_model) */, numberOfAttentionHeads /* Number of attention heads */;
+
+    // Projection matrices for Q, K, V and final projection matrix
     Collective<t> queryWeights, keyWeights, valueWeights, outputWeights;
-    t scaleFactor;
+    t scaleFactor /* Scaling factor for attention scores */;
 
     public:
         Attention(void) : dimensionsOfAttentionHead(floor((t)(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER/DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER))), dimensionsOfTheModel(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER), numberOfAttentionHeads(DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER), scaleFactor(0)
@@ -69,8 +72,9 @@ class Attention // is all you need.
             //scaleFactor = std::sqrt(d_model / num_heads);  // Scaling factor for stability
             /*
                 Since the scaling factor in self-attention is typically sqrt(d_k), where d_k is the dimension of a single attention head.
+                // scaleFactor = std::sqrt(d_model / num_heads);  // Scaling factor for stability
              */
-            scaleFactor = std::sqrt(d_model);
+            scaleFactor = std::sqrt(dimensionsOfAttentionHead);
         }
 
         /*
@@ -115,8 +119,8 @@ class Attention // is all you need.
             - The return value...
             3 The final output of the forward method is the weighted sum of the values, where the weights are the normalized attention scores.
          */        
-        Collective<t> forward(Collective<t>& ei_query, Collective<t>& ei_key, Collective<t>& ei_value)
-        {             
+        Collective<t> forward(Collective<t>& ei_query, Collective<t>& ei_key, Collective<t>& ei_value, Collective<t>& mask)
+        {                          
             /*
                 Linear transformations, compute queries, keys, and values
              */
@@ -125,6 +129,10 @@ class Attention // is all you need.
                 It makes sense to use singular names (query, key, value) because:
                 - Each line is processed independently (not as a batch).
                 - Each token gets transformed into a query, key, and value vector separately before attention is applied.
+
+                The "scores" matrix will always be square if, ei_query and ei_key has the same shape... 
+                Which is true in the case of this implementation and...
+                that is why we can do away with just a query mask and we donot need a seperate query mask 
              */
             Collective<t> query, key, value, scores;
             /*
@@ -138,13 +146,81 @@ class Attention // is all you need.
             
             try
             {
-                query = Numcy::matmul<t>(ei_query, queryWeights);
-                key = Numcy::matmul<t>(ei_key, keyWeights);
-                value = Numcy::matmul<t>(ei_value, valueWeights);
+                query = Numcy::matmul<t>(ei_query, queryWeights) * sqrt(1.0 / dimensionsOfTheModel);                
+                key = Numcy::matmul<t>(ei_key, keyWeights) * sqrt(1.0 / dimensionsOfTheModel);                
+                value = Numcy::matmul<t>(ei_value, valueWeights) * sqrt(1.0 / dimensionsOfTheModel);
                 
-                // Compute scaled dot-product attention scores
-                scores = Numcy::matmul<t>(query, Numcy::transpose(key)); // scaleFactor
+                // Zero out padded rows in the projected value matrix (after matmul(ei_value, valueWeights) but before attention)                 
+                for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < value.getShape().getDimensionsOfArray().getNumberOfInnerArrays(); k++)
+                {
+                    if (mask[k] == 0)
+                    {
+                        for (cc_tokenizer::string_character_traits<char>::size_type l = 0; l < value.getShape().getNumberOfColumns(); l++)
+                        {
+                            //query[k*value.getShape().getNumberOfColumns() + l] = /*std::numeric_limits<t>::lowest()*/ 0;
+                            //key[k*value.getShape().getNumberOfColumns() + l] = /*std::numeric_limits<t>::lowest()*/ 0;
+                            value[k*value.getShape().getNumberOfColumns() + l] = /*std::numeric_limits<t>::lowest()*/ 0;
+                        }
+                    }
+                }  
 
+                /* I have checked with ADHOC_DEBUG_MACRO for the first run of above three functions their outputs keep the padding rows */
+
+                // *************************************** //
+                //  Proceed with attention calculation...  //
+                // *************************************** //
+
+                /* Compute scaled dot-product attention scores */
+                scores = Numcy::matmul<t>(query, Numcy::transpose(key)) * sqrt(1.0 / dimensionsOfTheModel); 
+                static_assert(std::is_same<cc_tokenizer::allocator<double>, cc_tokenizer::allocator<double>>::value, "Double allocator specialization missing");
+
+                /**
+                 * WORKAROUND IMPLEMENTATION FOR SCALAR DIVISION
+                 * 
+                 * Original Issue:
+                 * - The template operator/(F x) that uses cc_tokenizer::allocator fails despite:
+                 *   1. Confirmed allocator<double> specialization exists (static_assert passes)
+                 *   2. scaleFactor is verified to be of type double (typeid shows 'd')
+                 * - The root cause appears to be template instantiation/visibility issue in complex inheritance chain
+                 *
+                 * Current Solution:
+                 * 1. Creates a temporary Collective<t> with shape [1,1] initialized to zeros
+                 *    - Uses Numcy::zeros instead of allocator to avoid template issues
+                 *    - Explicitly sets the single element to scaleFactor value
+                 * 2. Uses existing Collective<t>/Collective<t> operator
+                 *
+                 * Advantages:
+                 * - Avoids problematic allocator path entirely
+                 * - Uses already tested/working matrix division
+                 * - Maintains numerical consistency with other operations
+                 *
+                 * Trade-offs:
+                 * - Slightly less efficient than direct scalar division:
+                 *   - Allocates temporary matrix (though small)
+                 *   - Uses full matrix division machinery
+                 * - Requires scaleFactor to be convertible to type t
+                 *
+                 * Future Improvements:
+                 * 1. Could implement optimized scalar division operator later:
+                 *    template<typename t>
+                 *    Collective<t> operator/(t scalar) { element-wise division }
+                 * 2. Should investigate why allocator path fails despite proper specialization
+                 *
+                 * Debugging Notes:
+                 * - Verified working for float/double cases
+                 * - Maintains proper dimensionality in output
+                 * - Preserves exception safety guarantees
+                 */
+                Collective<t> divisor = Numcy::zeros<t>(DIMENSIONS{1, 1, NULL, NULL});    
+                divisor[0] = scaleFactor;
+                scores = scores / divisor;                                
+                //scores = scores / static_cast<double>(scaleFactor);
+                //std::cout << "Type of scaleFactor: " << typeid(decltype(scaleFactor)).name() << std::endl;
+
+                ADHOC_IMPLEMENTATION_OF_MASK_QUERY(scores, mask);
+                ADHOC_IMPLEMENTATION_OF_MASK_KEY(scores, mask);
+                /*ADHOC_DEBUG_MACRO(scores);*/
+                
                 /*
                     Do You Need src_mask?
                     If input sequences are of equal length and don't have padding, then src_mask might not be meeded. However, it's best to support it for flexibility later.
@@ -159,16 +235,19 @@ class Attention // is all you need.
 
                     Make sure src_mask has negative infinity (-inf) where padding exists, so softmax turns those values into 0.
 
-                    Check Your Attention Class:
-                    If your attention implementation already accepts a mask parameter, you should pass src_mask from the encoder when calling forward().
+                    Check Attention Class:
+                    If attention implementation already accepts a mask parameter, pass src_mask from the encoder when calling forward()
                  */
 
                 // Apply softmax to get attention weights   
                 attention_weights = softmax<t>(scores);
+                         
+                /* ADHOC_DEBUG_MACRO(value); */
+                
                 // Multiply by value
                 output = Numcy::matmul<t>(attention_weights, value);  
                 // Apply output transformation
-                output = Numcy::matmul<t>(output, outputWeights);
+                output = Numcy::matmul<t>(output, outputWeights);                
             }
             catch(ala_exception& e)
             {

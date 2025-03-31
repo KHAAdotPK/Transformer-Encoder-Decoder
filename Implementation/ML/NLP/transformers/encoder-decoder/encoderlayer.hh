@@ -65,7 +65,7 @@ class EncoderLayer
         {                        
         }
         
-        Collective<t> forward(Collective<t>& ei)
+        Collective<t> forward(Collective<t>& ei, Collective<t>& mask)
         {
             /*
                 The output of MULTIHEADATTENTION::forward() is typically a transformed representation of the input sequence, where each token's representation has been updated based on attention over all tokens in the sequence. In a Transformer encoder, this output is usually processed further in the following steps:
@@ -105,7 +105,7 @@ class EncoderLayer
 
                     Read more about in the comment section of MULTIHEADATTENTION::forward()
                 */                           
-                output = attention.forward(ei, ei, ei); // Residual connection around attention
+                output = attention.forward(ei, ei, ei, mask); // Residual connection around attention
                 output = ei + output; // Residual connection around attention
 
                 output = norm1.forward(output); // Layer normalization

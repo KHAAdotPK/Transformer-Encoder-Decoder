@@ -94,7 +94,7 @@ class Encoder
             @return, the output of the last encoder layer
          */
         /*template <typename t = float>*/
-        Collective<t> forward(Collective<t>& ei) const
+        Collective<t> forward(Collective<t>& ei, Collective<t>& mask) const
         {
             /*ENCODERLAYERLIST_PTR*/EncoderLayerList<t>* current = encoderLayerListHead;
 
@@ -104,11 +104,64 @@ class Encoder
             
             while (current != NULL)
             {
-                output = current->ptr->forward(output);
+                output = current->ptr->forward(output, mask);
 
                 current = current->next;                    
             }
-            
+
+            /*
+                Add explicit zeroing of padded rows after all encoder layers,
+                right before returning the final encoder output.
+                This is a foolproof way to guarantee padding doesn't leak through
+             */
+            /**
+             * CRITICAL PADDING HANDLING
+             * =========================
+             * 
+             * WHY THIS IS NECESSARY:
+             * ----------------------
+             * 1. Theoretical Ideal:
+             *    - Attention masking (-inf) should prevent padded tokens from affecting outputs
+             *    - LayerNorm and residual connections can still propagate small non-zero values
+             * 
+             * 2. Practical Reality:
+             *    - Floating-point arithmetic introduces numerical noise
+             *    - Residual connections may carry forward padding zeros imperfectly
+             *    - LayerNorm re-scales all values, including padding positions
+             * 
+             * 3. Safety Guarantee:
+             *    - Downstream layers (especially decoder cross-attention) assume padding is truly inert
+             *    - Zeroing ensures mathematical correctness regardless of architecture changes
+             * 
+             * HOW TO IMPLEMENT:
+             * ----------------
+             * 1. Add this AFTER all encoder layers but BEFORE returning output:
+             * 
+             *    for (size_t i = 0; i < mask.size(); ++i) {
+             *        if (mask[i] == 0) {
+             *            std::fill_n(&output[i * d_model], d_model, 0.0);
+             *        }
+             *    }
+             * 
+             * 2. Requirements:
+             *    - Must operate on final encoder output
+             *    - Must use original padding mask (1=real, 0=padding)
+             *    - Should be the LAST operation before return
+             * 
+             * DEBUGGING CONFIRMATION:
+             * ----------------------
+             * Verify padded rows show EXACT zeros:
+             * 
+             *    [ [ 0.12, -0.45, ...],  // Real token
+             *      [ 0.00,  0.00, ...],  // Padded
+             *      [ 0.00,  0.00, ...] ] // Padded
+             * 
+             * PERFORMANCE NOTE:
+             * ----------------
+             * - Adds O(N·d_model) time complexity (trivial vs attention's O(N²·d_model))
+             * - No memory overhead
+             * - Critical for correctness worth the minor cost
+             */            
             return output;
         }
 

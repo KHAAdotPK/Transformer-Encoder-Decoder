@@ -584,7 +584,7 @@ class Model
                                     }
                                 }
                                 Encoder<t> encoder(ei.getShape().getNumberOfColumns(), DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER);                                
-                                Collective<t> eo = encoder.forward(ei);
+                                Collective<t> eo = encoder.forward(ei, mask);
                                                                 
                                 /*                                    
                                     In the encoder input, rows (or lines) containing all zeros represent sequences with fewer tokens. 
@@ -633,7 +633,7 @@ class Model
                                           that was originally all zeros remains all zeros throughout the encoding process.
                                         - The following statement explicitly enforces this constraint by applying a masking operation
                                  */
-                                ADHOC_IMPLEMENTATION_OF_MASK(eo, mask);
+                                /*ADHOC_IMPLEMENTATION_OF_MASK(eo, mask);*/
 
                                 std::cout<< "::: DEBUG DATA -: Encoder Output(eo) :- :::"  << std::endl;
                                 std::cout<< "Columns: " << eo.getShape().getNumberOfColumns() << ", Rows: " << eo.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
