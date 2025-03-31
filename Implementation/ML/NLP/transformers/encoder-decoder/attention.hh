@@ -13,8 +13,8 @@
     Multi head attention.
  */
 template <typename t = double>
-class Attention // is all you need.
-{
+class Attention // Is all you need.
+{    
     cc_tokenizer::string_character_traits<char>::size_type dimensionsOfAttentionHead /* Size of each attention head (d_model/num_heads) */ , dimensionsOfTheModel /* Model dimension (d_model) */, numberOfAttentionHeads /* Number of attention heads */;
 
     // Projection matrices for Q, K, V and final projection matrix
@@ -22,6 +22,7 @@ class Attention // is all you need.
     t scaleFactor /* Scaling factor for attention scores */;
 
     public:
+        //  Default constructor
         Attention(void) : dimensionsOfAttentionHead(floor((t)(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER/DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER))), dimensionsOfTheModel(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER), numberOfAttentionHeads(DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER), scaleFactor(0)
         {   
             /*DIMENSIONS dim3 = {10, 3, NULL, NULL};
@@ -35,6 +36,7 @@ class Attention // is all you need.
            //Numcy::Random::randn(DIMENSIONS{0, 0, NULL, NULL});
         }
 
+        // Parameterized constructor
         /*
             @d_model, name from the paper "Attention is all we need" we call it "dimensionsOfTheModel". 
             @num_heads, Number of attention heads.            
@@ -219,7 +221,7 @@ class Attention // is all you need.
 
                 ADHOC_IMPLEMENTATION_OF_MASK_QUERY(scores, mask);
                 ADHOC_IMPLEMENTATION_OF_MASK_KEY(scores, mask);
-                /*ADHOC_DEBUG_MACRO(scores);*/
+                /* ADHOC_DEBUG_MACRO(scores); */
                 
                 /*
                     Do You Need src_mask?

@@ -3,6 +3,10 @@
     Q@khaa.pk 
  */
 
+ /*
+    Core Algorithm/Formula: output = gamma * (input - mean) / sqrt(variance + epsilon) + beta
+  */
+
 #include "header.hh"
 
 #ifndef NLP_ENCODER_DECODER_TRANSFORMER_MODEL_ENCODER_LAYER_NORMALIZATION_HH
@@ -14,8 +18,9 @@
 template <typename t = double>
 class EncoderLayerNormalization
 {
-    t epsilon;
-    cc_tokenizer::string_character_traits<char>::size_type dimensionsOfTheModel;
+    t epsilon /* To avoid division by zero */ ; 
+    cc_tokenizer::string_character_traits<char>::size_type dimensionsOfTheModel;    
+    // Trainable Parameters: current implementation, gamma and beta are initialized but not yet properly set up as trainable parameters
     Collective<t> gamma, beta;
 
     public:
@@ -41,6 +46,7 @@ class EncoderLayerNormalization
             }
         }
 
+        // Forward propagation
         Collective<t> forward(Collective<t>& input) throw (ala_exception)
         {
             /*
