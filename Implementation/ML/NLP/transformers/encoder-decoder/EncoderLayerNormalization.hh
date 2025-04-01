@@ -23,6 +23,9 @@ class EncoderLayerNormalization
     // Trainable Parameters: current implementation, gamma and beta are initialized but not yet properly set up as trainable parameters
     Collective<t> gamma, beta;
 
+    Collective<t> input, input_mean, input_variance, input_normalized;
+    Collective<t> input_dispersion, input_variance_stabilized;
+
     public:
         EncoderLayerNormalization(cc_tokenizer::string_character_traits<char>::size_type d_model, t eps = ENCODER_LAYER_NORMALIZATION_EPSILON_VALUE) throw (ala_exception)
         {
@@ -44,6 +47,84 @@ class EncoderLayerNormalization
             {
                 throw ala_exception(cc_tokenizer::String<char>("EncoderLayerNormalization::EncoderLayerNormalization() -> ") + cc_tokenizer::String<char>(e.what()));
             }
+        }
+
+        Collective<t> backward(Collective<t>& output_gradient) throw (ala_exception)
+        {
+            /*
+                Backpropagation for Layer Normalization:
+        
+                Given:
+                - y = γ * (x - μ) / √(σ² + ε) + β
+                - ∂L/∂y (output_gradient) is the incoming gradient
+        
+                We need to compute:
+                1. ∂L/∂γ = sum(∂L/∂y * (x - μ)/√(σ² + ε))
+                2. ∂L/∂β = sum(∂L/∂y)
+                3. ∂L/∂x = (∂L/∂y * γ)/√(σ² + ε) + 
+                           (∂L/∂σ² * 2(x - μ)/N) + 
+                           (∂L/∂μ * 1/N)
+             */
+            
+            Collective<t> input_gradient;
+            
+            try 
+            {
+                Collective<t> temp1, temp2;
+                // Retrieve saved values from forward pass
+                Collective<t> x_minus_mean = this->input_dispersion;  // (x - mean)
+                Collective<t> standard_deviation = Numcy::sqrt<t>(this->input_variance_stabilized);  // squareroot(varience + epsilon)
+
+                /*std::cout<< "output_gradient (columns) = " << output_gradient.getShape().getNumberOfColumns() << ", " << output_gradient.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl; 
+                std::cout<< "input_normalized (columns) = " << input_normalized.getShape().getNumberOfColumns() << ", " << input_normalized.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;*/ 
+
+                // 1. Gradient for gamma (∂L/∂γ)
+                Collective<t> gamma_gradient = Numcy::sum<t>(output_gradient * input_normalized);
+
+                // 2. Gradient for beta (∂L/∂β)
+                Collective<t> beta_gradient = Numcy::sum<t>(output_gradient);
+            
+                // 3. Gradient for input (∂L/∂x)
+
+                cc_tokenizer::string_character_traits<char>::size_type N = this->input.getShape().getN();  // Total elements in normalization dimension
+                // Part 1: Direct gradient from normalized output
+                Collective<t> dxhat = output_gradient * this->gamma;
+                // Part 2: Gradient through variance (∂L/∂σ²)
+                temp1 = ((dxhat * x_minus_mean) * (t)-0.5);
+                temp2 = Numcy::pow<t>(standard_deviation, (t)-3);
+                Collective<t> dvar = Numcy::sum<t>(temp1 * temp2);
+                // Part 3: Gradient through mean (∂L/∂μ)                
+                temp1 = Numcy::mean(x_minus_mean * (t)-2.0);
+                temp2 =  dvar * temp1;                
+                Collective<t> dmean = Numcy::sum((dxhat * (t)-1.0) / standard_deviation) + temp2;
+
+                // Combine all components
+                temp1 = dvar * (t)2.0;
+                //temp1 =  temp1 * x_minus_mean; 
+                temp1 = (x_minus_mean * temp1);
+                temp2 = Numcy::zeros<t>(DIMENSIONS{1, 1, 0, 0});
+                temp2[0] = (t)N;
+                temp1 = temp1 / temp2;                
+                /*input_gradient = (dxhat / std_dev) + 
+                        (dvar * 2.0f * x_minus_mean / N) + 
+                        (dmean / N);*/
+                input_gradient = (dxhat / standard_deviation) + temp1;
+                temp1 = dmean / temp2;
+                input_gradient = input_gradient + temp1;                      
+                
+                /*std::cout<< "temp1 (columns) = " << temp1.getShape().getNumberOfColumns() << ", " << temp1.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
+                std::cout<< "x_minus_mean (columns) = " << x_minus_mean.getShape().getNumberOfColumns() << ", " << x_minus_mean.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;*/
+
+                // Update parameters (in practice, this would be done by an optimizer)
+                // this->gamma -= learning_rate * gamma_gradient;
+                // this->beta -= learning_rate * beta_gradient;
+            }
+            catch(ala_exception& e) 
+            {
+                throw ala_exception(cc_tokenizer::String<char>("EncoderLayerNormalization::backward() -> ") + cc_tokenizer::String<char>(e.what()));
+            }
+            
+            return input_gradient;
         }
 
         // Forward propagation
@@ -70,7 +151,8 @@ class EncoderLayerNormalization
             Collective<t> output;
 
             try
-            {                
+            {
+                this->input = input;                
                 /*std::cout<< input.getShape().getN() << std::endl;
                 for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < input.getShape().getN(); i++)
                 {
@@ -86,14 +168,18 @@ class EncoderLayerNormalization
                  
                 // Compute mean of the input tensor
                 input_mean = Numcy::mean(input);
+                this->input_mean = input_mean;
+
                 // Compute variance of the input tensor
                 input_variance = Numcy::variance(input, input_mean);
+                this->input_variance = input_variance;
 
                 /*std::cout<< "Input mean = " << input_mean[0] << std::endl;
                 std::cout<< "Input variance = " << input_variance[0] << std::endl;*/
 
                 // Normalize input: (input - mean) / sqrt(variance + epsilon)
                 input_dispersion = input - input_mean;
+                this->input_dispersion = input_dispersion;
 
                 /*std::cout<< " -------- -- -- -- - -- - - - -- - - - " << std::endl;
                 for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < input_dispersion.getShape().getN(); i++)
@@ -102,8 +188,11 @@ class EncoderLayerNormalization
                 }    
                 std::cout<< "\n ---- - -- - - - - - - -- - - - - - - -- -  ----- ----  " << std::endl;*/
 
-                input_variance_stabilized = input_variance + /*(t)(1e-6)*/ std::max(input_variance[0], epsilon);                
+                input_variance_stabilized = input_variance + /*(t)(1e-6)*/ std::max(input_variance[0], epsilon);
+                this->input_variance_stabilized = input_variance_stabilized;
+
                 input_normalized = input_dispersion / Numcy::sqrt(input_variance_stabilized);
+                this->input_normalized = input_normalized;
 
                 /*std::cout<< "\n ---- - -- - - - - - - -- - - - - - - -- -  ----- ----  " << std::endl;
                 for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < input_normalized.getShape().getN(); i++)
