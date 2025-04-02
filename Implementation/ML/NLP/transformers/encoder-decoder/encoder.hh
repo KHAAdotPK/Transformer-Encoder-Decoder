@@ -42,7 +42,13 @@ class Encoder
                     current = current->next;
                 }
                 
-                current->next = NULL;    
+                current->next = NULL;
+                /*
+                    In a Transformer-based encoder (such as in BERT or GPT-like models), each encoder layer consists of multiple sublayers, typically:
+                    1. Self-Attention Layer
+                    2. Feedforward Layer
+                    3. Layer Normalization (before or after these)
+                 */    
                 current->ptr = new EncoderLayer<t>(dimensionsOfTheModel, numberOfAttentionHeads, dropOutRate);
             }                       
         }
@@ -81,7 +87,13 @@ class Encoder
                     current = current->next;
                 }
                 
-                current->next = NULL;    
+                current->next = NULL; 
+                /*
+                    In a Transformer-based encoder (such as in BERT or GPT-like models), each encoder layer consists of multiple sublayers, typically:
+                    1. Self-Attention Layer
+                    2. Feedforward Layer
+                    3. Layer Normalization (before or after these)
+                 */     
                 current->ptr = new EncoderLayer<t>(dimensionsOfTheModel, numberOfAttentionHeads, dropOutRate);                
             }                       
         }
@@ -89,7 +101,8 @@ class Encoder
         /*
             Forward Pass
             ---------------
-            The forward method propagates the input(encoder input) through all encoder layers
+            When training the model, the forward pass computes outputs, 
+            this forward pass propagates the input(encoder input) through all encoder layers
             @ei, encoder input
             @return, the output of the last encoder layer
          */
@@ -104,6 +117,12 @@ class Encoder
             
             while (current != NULL)
             {
+                /*
+                    How the Forward Pass Works (EncoderLayer::forward()):
+                    1. The input goes through Self-Attention → produces some transformed output
+                    2. The output is then passed through Layer Normalization (EncoderLayerNormalization)
+                    3. The final output of the encoder layer is then sent to the next encoder layer (or decoder)
+                 */
                 output = current->ptr->forward(output, mask);
 
                 current = current->next;                    

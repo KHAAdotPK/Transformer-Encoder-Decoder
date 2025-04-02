@@ -51,9 +51,9 @@ class EncoderLayerNormalization
 
         /*
             The function's job is to use @incoming_gradient and compute...
-            - gradient for gamma(the scale parameter)
-            - gradient for beta(the shift parameter) 
-            - gradient for inputs to propagate further
+            - gradient for gamma(the scale parameter) ∂L/∂γ 
+            - gradient for beta(the shift parameter) ∂L/∂β
+            - gradient for inputs to propagate further ∂L/∂x
             
             @incoming_gradient, in neural networks, backpropagation works by computing gradients layer by layer,
                                 starting from the final loss and moving backward through the network.                                
@@ -64,15 +64,20 @@ class EncoderLayerNormalization
                                 Each layer (upstream, like EncoderLayerNormalization) receives a gradient from the layer
                                 ahead of it (downstream, closer to the final loss, like EncoderLayer),
                                 which tells it how changes in its outputs (the receiving layer’s activations, i.e., EncoderLayerNormalization)
-                                affect the final loss, e.g., EncoderLayerNormalization receives it from EncoderLayer.
-         */
+                                affect the final loss, e.g., EncoderLayerNormalization receives it from EncoderLayer
+         */                                                                
         Collective<t> backward(Collective<t>& incoming_gradient) throw (ala_exception)
         {
             /*
                 Backpropagation for Layer Normalization:
         
                 Given:
-                - y = γ * (x - μ) / √(σ² + ε) + β
+                x = input
+                y = output
+                γ = gamma
+                β = beta
+                L = loss
+                - y(output) = γ(gamma) * (x - μ) / √(σ² + ε) + β(beta)
                 - ∂L/∂y-(small y) (incoming_gradient) is the incoming gradient
         
                 We need to compute:
@@ -84,8 +89,8 @@ class EncoderLayerNormalization
              */
 
             /*
-                - The notation (chnage/gradient in/of L)/(change/gradient in/of y-(small y)) represents the gradient of the loss function L 
-                  with respect to y, meaning how much the loss changes when y changes.
+                - The notation ∂L/∂y = (chnage/gradient in/of L)/(change/gradient in/of y-(small y)) represents the gradient of the loss function L 
+                  with respect to y(output), meaning how much the loss changes when y(output) changes.
                   This is commonly referred to as the incoming gradient because it is passed from the next layer during backpropagation
              */ 
             
