@@ -49,22 +49,45 @@ class EncoderLayerNormalization
             }
         }
 
-        Collective<t> backward(Collective<t>& output_gradient) throw (ala_exception)
+        /*
+            The function's job is to use @incoming_gradient and compute...
+            - gradient for gamma(the scale parameter)
+            - gradient for beta(the shift parameter) 
+            - gradient for inputs to propagate further
+            
+            @incoming_gradient, in neural networks, backpropagation works by computing gradients layer by layer,
+                                starting from the final loss and moving backward through the network.                                
+                                This received gradient is called the incoming gradient because it is coming from the 
+                                previous layer (downstream) during backpropagation
+                                (it represents the gradient of the loss with respect to the output of the forward pass
+                                of the same layer to which this backward propagation function belongs).                                
+                                Each layer (upstream, like EncoderLayerNormalization) receives a gradient from the layer
+                                ahead of it (downstream, closer to the final loss, like EncoderLayer),
+                                which tells it how changes in its outputs (the receiving layer’s activations, i.e., EncoderLayerNormalization)
+                                affect the final loss, e.g., EncoderLayerNormalization receives it from EncoderLayer.
+         */
+        Collective<t> backward(Collective<t>& incoming_gradient) throw (ala_exception)
         {
             /*
                 Backpropagation for Layer Normalization:
         
                 Given:
                 - y = γ * (x - μ) / √(σ² + ε) + β
-                - ∂L/∂y (output_gradient) is the incoming gradient
+                - ∂L/∂y-(small y) (incoming_gradient) is the incoming gradient
         
                 We need to compute:
-                1. ∂L/∂γ = sum(∂L/∂y * (x - μ)/√(σ² + ε))
+                1. ∂L/∂γ-(capital Y) = sum(∂L/∂y * (x - μ)/√(σ² + ε))
                 2. ∂L/∂β = sum(∂L/∂y)
                 3. ∂L/∂x = (∂L/∂y * γ)/√(σ² + ε) + 
                            (∂L/∂σ² * 2(x - μ)/N) + 
                            (∂L/∂μ * 1/N)
              */
+
+            /*
+                - The notation (chnage/gradient in/of L)/(change/gradient in/of y-(small y)) represents the gradient of the loss function L 
+                  with respect to y, meaning how much the loss changes when y changes.
+                  This is commonly referred to as the incoming gradient because it is passed from the next layer during backpropagation
+             */ 
             
             Collective<t> input_gradient;
             
@@ -75,20 +98,20 @@ class EncoderLayerNormalization
                 Collective<t> x_minus_mean = this->input_dispersion;  // (x - mean)
                 Collective<t> standard_deviation = Numcy::sqrt<t>(this->input_variance_stabilized);  // squareroot(varience + epsilon)
 
-                /*std::cout<< "output_gradient (columns) = " << output_gradient.getShape().getNumberOfColumns() << ", " << output_gradient.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl; 
+                /*std::cout<< "incoming_gradient (columns) = " << incoming_gradient.getShape().getNumberOfColumns() << ", " << incoming_gradient.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl; 
                 std::cout<< "input_normalized (columns) = " << input_normalized.getShape().getNumberOfColumns() << ", " << input_normalized.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;*/ 
 
                 // 1. Gradient for gamma (∂L/∂γ)
-                Collective<t> gamma_gradient = Numcy::sum<t>(output_gradient * input_normalized);
+                Collective<t> gamma_gradient = Numcy::sum<t>(incoming_gradient * input_normalized);
 
                 // 2. Gradient for beta (∂L/∂β)
-                Collective<t> beta_gradient = Numcy::sum<t>(output_gradient);
+                Collective<t> beta_gradient = Numcy::sum<t>(incoming_gradient);
             
                 // 3. Gradient for input (∂L/∂x)
 
                 cc_tokenizer::string_character_traits<char>::size_type N = this->input.getShape().getN();  // Total elements in normalization dimension
                 // Part 1: Direct gradient from normalized output
-                Collective<t> dxhat = output_gradient * this->gamma;
+                Collective<t> dxhat = incoming_gradient * this->gamma;
                 // Part 2: Gradient through variance (∂L/∂σ²)
                 temp1 = ((dxhat * x_minus_mean) * (t)-0.5);
                 temp2 = Numcy::pow<t>(standard_deviation, (t)-3);

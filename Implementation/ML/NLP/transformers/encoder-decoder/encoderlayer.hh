@@ -108,9 +108,10 @@ class EncoderLayer
                 output = attention.forward(ei, ei, ei, mask); // Residual connection around attention
                 output = ei + output; // Residual connection around attention
 
-                output = norm1.forward(ei); // Layer 
+                output = norm1.forward(ei); // Layer normalization
                 //Collective<t> foo = Collective<t>{NULL, DIMENSIONS{0, 0, NULL, NULL}};
-                norm1.backward(output);
+                //The encoder layer should only call backward() when running in training mode
+                norm1.backward(ei);
 
                 // ************************************************************************************ //
                 //  The following commented statement has been replaced with the two statements below.  //
@@ -126,9 +127,10 @@ class EncoderLayer
                 Collective<t> residual = ffn.forward(output); // Feed-forward network output
                 output = output + residual; // Residual connection around FFN
                 
+                // The encoder layer should only call backward() when running in training mode
                 // The output of the feed-forward network is then passed through layer normalization to stabilize the training process.
                 output = norm2.forward(output); // Layer normalization
-                //norm2.backward(/*foo*/);
+                norm2.backward(ei);
             }
             catch(ala_exception& e)
             {
