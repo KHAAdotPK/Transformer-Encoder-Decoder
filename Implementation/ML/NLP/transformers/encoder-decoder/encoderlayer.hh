@@ -53,7 +53,8 @@ class EncoderLayer
     public:
         //EncoderLayer() : dimensionsOfTheModel(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER), numberOfAttentionHeads(DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER), dropOutRate(DEFAULT_DROP_OUT_RATE_HYPERPARAMETER), attention(), ffn(dimensionsOfTheModel, dropOutRate), norm1(dimensionsOfTheModel), norm2(dimensionsOfTheModel)
         EncoderLayer() :  attention(), ffn(dimensionsOfTheModel, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER), norm1(dimensionsOfTheModel), norm2(dimensionsOfTheModel), dimensionsOfTheModel(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER), numberOfAttentionHeads(DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER), dropOutRate(DEFAULT_DROP_OUT_RATE_HYPERPARAMETER) 
-        {            
+        {  
+            EncoderLayerNormalization::ENCODER_LAYER_NORMALIZATION_EPSILON_VALUE; // Replaces macro, type-safe
         }
         /*
             @d_model, name from the paper "Attention is all we need" we call it "dimensionsOfTheModel". 
@@ -108,10 +109,12 @@ class EncoderLayer
                 output = attention.forward(ei, ei, ei, mask); // Residual connection around attention
                 output = ei + output; // Residual connection around attention
 
-                output = norm1.forward(ei); // Layer normalization
-                //Collective<t> foo = Collective<t>{NULL, DIMENSIONS{0, 0, NULL, NULL}};
-                //The encoder layer should only call backward() when running in training mode
-                norm1.backward(ei);
+                output = norm1.forward(ei); // Layer normalization                
+                /*
+                    The encoder layer should only call backward() when running in training mode and,
+                    during training, gradients will flow in the reverse order
+                 */                
+                norm1.backward(output);
 
                 // ************************************************************************************ //
                 //  The following commented statement has been replaced with the two statements below.  //
@@ -128,9 +131,13 @@ class EncoderLayer
                 output = output + residual; // Residual connection around FFN
                 
                 // The encoder layer should only call backward() when running in training mode
-                // The output of the feed-forward network is then passed through layer normalization to stabilize the training process.
+                // The output of the feed-forward network is then passed through layer normalization to stabilize the training process.                
                 output = norm2.forward(output); // Layer normalization
-                norm2.backward(ei);
+                /*
+                    The encoder layer should only call backward() when running in training mode and,
+                    during training, gradients will flow in the reverse order
+                 */ 
+                norm2.backward(output);
             }
             catch(ala_exception& e)
             {
