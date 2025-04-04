@@ -34,7 +34,7 @@
 template <typename t = double>
 class EncoderFeedForwardNetwork 
 {
-    cc_tokenizer::string_character_traits<char>::size_type dimensionsOfTheModel;
+    cc_tokenizer::string_character_traits<char>::size_type dimensionsOfTheModel; // Model dimensionality
     /*
         Dropout Rate and Its Function in Neural Networks
         ---------------------------------------------------
@@ -52,7 +52,9 @@ class EncoderFeedForwardNetwork
         - Works Only During Training → During inference, dropout is disabled, and neuron outputs are scaled accordingly
      */
     t dropOutRate;
-    Collective<t> weights1, weights2, bias1, bias2;
+
+    Collective<t> weights1, weights2; // Weights, W1 and W2
+    Collective<t> bias1, bias2; // Biases
 
     public:
                 
@@ -86,8 +88,11 @@ class EncoderFeedForwardNetwork
             DIMENSIONS dim1 = DIMENSIONS{4 * d_model, d_model, NULL, NULL};  // Expand
             DIMENSIONS dim2 = DIMENSIONS{d_model, 4 * d_model, NULL, NULL};  // Reduce back
 
+            // Initialize dimensions/values for weight matrices W1, W2
             weights1 = Numcy::Random::randn<t>(dim1);
             weights2 = Numcy::Random::randn<t>(dim2);
+
+            // Initialize dimensions/values for biases
             bias1 = Numcy::Random::randn<t>(DIMENSIONS{4 * d_model, 1, NULL, NULL});
             bias2 = Numcy::Random::randn<t>(DIMENSIONS{d_model, 1, NULL, NULL});
 
@@ -96,39 +101,37 @@ class EncoderFeedForwardNetwork
             
         }
 
-        Collective<t> forward(Collective<t>& input)
+        Collective<t> forward(Collective<t>& input, bool is_training = true)
         {
             //std::cout<< "input columns = " << input.getShape().getNumberOfColumns() << ", " << input.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
             //std::cout<< "weights1 columns = " << weights1.getShape().getNumberOfColumns() << ", " << weights1.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
-
-            Collective<t> local_input = input;
-
+            
             try
-            {                                        
+            {                                   
                 // First Linear Transformation
-                local_input = Numcy::matmul(local_input, weights1) + bias1;
-
-                // Apply ReLU Activation Function. ReLU, short for Rectified Linear Unit                                
-                local_input = Numcy::ReLU(local_input);
-
-                // Second Linear Transformation
-                local_input = Numcy::matmul(local_input, weights2) + bias2;  
+                Collective<t> z1 = Numcy::matmul(input, weights1) + bias1;
                 
+                // Apply ReLU Activation Function. ReLU, short for Rectified Linear Unit
+                Collective<t> a1 = Numcy::ReLU(z1); 
+                
+                // Second Linear Transformation
+                Collective<t> z2 = Numcy::matmul(a1, weights2) + bias2; 
+                                
                 /*
                     Optional Dropout (if implemented in Numcy)
-                    Dropout is usually disabled during inference
+                    Dropout is disabled during inference
                  */
-                if (dropOutRate > 0)
+                if (is_training && dropOutRate > 0)
                 {
-                    local_input = Numcy::dropout(local_input, dropOutRate);
+                    z2 = Numcy::dropout(z2, dropOutRate);
                 }
+
+                return z2;
             }
             catch (ala_exception& e)
             {                
                 throw ala_exception(cc_tokenizer::String<char>("EncoderFeedForwardNetwork::forward() -> ") + cc_tokenizer::String<char>(e.what()));
-            }
-            
-            return local_input;
+            }                        
         }
 };
 
