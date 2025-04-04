@@ -8,6 +8,43 @@
 #ifndef NLP_ENCODER_DECODER_TRANSFORMER_MODEL_ENCODER_FEED_FORWARD_NETWORK_HH
 #define NLP_ENCODER_DECODER_TRANSFORMER_MODEL_ENCODER_FEED_FORWARD_NETWORK_HH
 
+/*   
+    EncoderFeedForwardNetwork Class
+    --------------------------------
+    This class implements a FeedForward Neural Network (FFN) for the Transformer encoder-decoder model, as described in the paper "Attention is All You Need" (Vaswani et al., 2017). It processes the output of the multi-head attention mechanism by applying a non-linear transformation.
+
+    The FFN architecture consists of:
+    1. A linear transformation that expands the input dimension from `d_model` to `4 * d_model`.
+    2. A ReLU activation function to introduce non-linearity.
+    3. Another linear transformation that reduces the dimension back to `d_model`.
+
+    FFN Functionality:
+    ------------------
+    Mathematically, the FFN operates as:
+        FFN(x) = max(0, xW_1 + b_1)W_2 + b_2
+        OR
+        FFN(input) = Numcy::matmul(ReLU(Numcy::matmul(input, weights1) + bias1), weights2) + bias2
+
+    Where:
+    - `weights1` has shape `(d_model, 4 * d_model)` for expansion.
+    - A ReLU activation is applied to introduce non-linearity.
+    - `weights2` has shape `(4 * d_model, d_model)` to reduce the dimension back.
+
+    Dropout Regularization:
+    -------------------------
+    Dropout is used as a regularization technique to prevent overfitting. During training, a fraction of neurons is randomly deactivated, based on the `dropOutRate`. During inference, dropout is disabled, and outputs are scaled accordingly.
+
+    Constructor:
+    ------------
+    The constructor initializes the weights and biases for the two linear transformations, using a random initialization (Gaussian distribution). The model dimensionality `d_model` and dropout rate `dropOutRate` are provided as inputs.
+
+    Forward Pass:
+    -------------
+    The `forward()` method implements the forward pass of the FFN, applying the two linear transformations, ReLU activation, and optional dropout (during training).
+    
+    Author: Q@khaa.pk
+*/
+
 /*
     The FeedForwardNetwork class implements a two-layer feedforward neural network with a ReLU activation function, as described in the "Attention is All You Need" paper.
     It is designed to process the output of the multi-head attention mechanism and apply a non-linear transformation to it.
@@ -134,5 +171,33 @@ class EncoderFeedForwardNetwork
             }                        
         }
 };
-
 #endif
+
+/*
+    Optional But Consider for Later(not urgent for now)
+    -----------------------------------------------------
+    Once this model is wired up and is up and running, consider the following things which could be added to the implementation...
+    - Weight initialization strategy (Xavier/He for FFN layers, if you go deeper)
+    - Parameter loading/saving methods for inference
+    - Unit test for this class with a fixed input
+    - Tracking number of parameters (in case you want to print total model size later)
+
+    Abstraction and Reusability
+    ------------------------------
+    While this class and other classes making up encoder and decoder are complete and clean,
+    you might consider pushing toward a more abstract Layer base class with forward() as a
+    virtual function. That’d help if you build more layers(like EncoderFeedForwardNetwork is one such layer) later
+
+    template <typename t = double>
+    class Layer {
+        public:
+            virtual Collective<t> forward(Collective<t>& input, bool is_training = true) = 0;
+            virtual ~Layer() = default;
+    };
+
+    template <typename t = double>
+    class EncoderFeedForwardNetwork : public Layer<t> {
+        // Your FFN logic
+        Collective<t> forward(Collective<t>& input, bool is_training = true) override { ... }
+    };
+ */
