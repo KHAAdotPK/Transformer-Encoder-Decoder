@@ -4,6 +4,36 @@
     Q@khaa.pk
  */
 
+/*
+    Attention(Q,K,V) = softmax(Q*Numcy::transpose(K)) * 1 / sqrt(d_k)) * V
+    Where:
+    - Q is query
+    - K is key
+    - d_k is the dimensions per attention head
+
+    scaling factor = 1 / sqrt(d_k)
+
+    Without scaling: 
+    - The dot products of Q and K(transposed) can become large when d_k is large
+    - This pushes softmax into regions with very small gradients (bad for learning)
+
+    With scaling:
+    - By multiplying the dot products(output of softmax function) by "scaling factor", we normalize them
+    - This keeps the softmax output in a numerically stable range
+    - Thus "scaling factor" ensures gradients don't vanish or explode
+
+    Taking the floor:    
+    The floor function returns the greatest integer that is less than or equal to the given value.
+    As a result, if the input to floor is less than 1, it will return 0.
+
+    Example:
+    floor(0.9) -> 0
+    floor(0.1) -> 0
+    floor(1.7) -> 1
+    
+    This behavior can lead to unintended results, especially when dealing with small fractional values
+ */ 
+
 #include "./header.hh"
 
 #ifndef NLP_ENCODER_DECODER_TRANSFORMER_MODEL_ATTENTION_HH
@@ -15,7 +45,7 @@
 template <typename t = double>
 class Attention // Is all you need.
 {    
-    cc_tokenizer::string_character_traits<char>::size_type dimensionsOfAttentionHead /* Size of each attention head (d_model/num_heads) */ , dimensionsOfTheModel /* Model dimension (d_model) */, numberOfAttentionHeads /* Number of attention heads */;
+    cc_tokenizer::string_character_traits<char>::size_type dimensionsOfAttentionHead /* Size of each attention head(in dimensions per head is) d_k = (d_model/num_heads), in other words dimensionsOfAttentionHead is our d_k  */ , dimensionsOfTheModel /* Model dimension (d_model) */, numberOfAttentionHeads /* Number of attention heads */;
 
     // Projection matrices for Q, K, V and final projection matrix
     Collective<t> queryWeights, keyWeights, valueWeights, outputWeights;
@@ -23,7 +53,7 @@ class Attention // Is all you need.
 
     public:
         //  Default constructor
-        Attention(void) : dimensionsOfAttentionHead(floor((t)(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER/DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER))), dimensionsOfTheModel(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER), numberOfAttentionHeads(DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER), scaleFactor(0)
+        Attention(void) : dimensionsOfAttentionHead(floor((t)(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER/DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER))), dimensionsOfTheModel(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER), numberOfAttentionHeads(DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER)
         {   
             /*DIMENSIONS dim3 = {10, 3, NULL, NULL};
             DIMENSIONS dim2 = {0, 10, &dim3, NULL};
@@ -34,6 +64,8 @@ class Attention // Is all you need.
             dim1.prev = &dim;               
             Numcy::Random::randn(dim);*/
            //Numcy::Random::randn(DIMENSIONS{0, 0, NULL, NULL});
+
+           scaleFactor = (1.0 / std::sqrt(dimensionsOfAttentionHead));
         }
 
         // Parameterized constructor
@@ -41,7 +73,7 @@ class Attention // Is all you need.
             @d_model, name from the paper "Attention is all we need" we call it "dimensionsOfTheModel". 
             @num_heads, Number of attention heads.            
          */
-        Attention(cc_tokenizer::string_character_traits<char>::size_type d_model, cc_tokenizer::string_character_traits<char>::size_type num_heads) : dimensionsOfAttentionHead((t)(d_model/num_heads)), dimensionsOfTheModel(d_model), numberOfAttentionHeads(num_heads)
+        Attention(cc_tokenizer::string_character_traits<char>::size_type d_model, cc_tokenizer::string_character_traits<char>::size_type num_heads) : dimensionsOfAttentionHead(floor((t)(d_model/num_heads))), dimensionsOfTheModel(d_model), numberOfAttentionHeads(num_heads)
         { 
             /*DIMENSIONS dim3 = DIMENSIONS{10, 3, NULL, NULL};
             DIMENSIONS dim2 = DIMENSIONS{0, 10, &dim3, NULL};
@@ -76,7 +108,7 @@ class Attention // Is all you need.
                 Since the scaling factor in self-attention is typically sqrt(d_k), where d_k is the dimension of a single attention head.
                 // scaleFactor = std::sqrt(d_model / num_heads);  // Scaling factor for stability
              */
-            scaleFactor = std::sqrt(dimensionsOfAttentionHead);
+            scaleFactor = (1.0 / std::sqrt(dimensionsOfAttentionHead));
         }
 
         /*
