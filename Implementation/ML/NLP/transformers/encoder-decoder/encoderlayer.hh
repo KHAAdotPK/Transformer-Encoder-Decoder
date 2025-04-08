@@ -22,20 +22,24 @@
 #ifndef NLP_ENCODER_DECODER_TRANSFORMER_MODEL_ENCODER_LAYER_HH
 #define NLP_ENCODER_DECODER_TRANSFORMER_MODEL_ENCODER_LAYER_HH
 
+/*
 template <typename t>
 class EncoderLayer;
-
+ 
 template <typename t = double>
 struct EncoderLayerList
 {
+*/
     /*
         Transformer encoder layer
      */
+/*    
     class EncoderLayer<t>* ptr; 
 
     struct EncoderLayerList<t>* next;
     struct EncoderLayerList<t>* previous;
 };
+*/
 
 /*
     The encoder consists of many encoder layers.
@@ -74,6 +78,9 @@ class EncoderLayer
               numberOfAttentionHeads(DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER),
               dropOutRate(DEFAULT_DROP_OUT_RATE_HYPERPARAMETER)
         {
+            /*
+                Layer Normalization Epsilon Call: The following line doesn’t actually do anything
+             */
             EncoderLayerNormalization::ENCODER_LAYER_NORMALIZATION_EPSILON_VALUE; // Replaces macro, type-safe
         }      
 
@@ -143,7 +150,7 @@ class EncoderLayer
 
             try 
             {
-               /*
+                /*
                     Apply attention mechanism with residual connection
 
                     The forward method of the ENCODERLAYER class call the forward method of the MULTIHEADATTENTION class with the same argument ei(encoder input) passed three times for query, key, and value.
@@ -153,7 +160,47 @@ class EncoderLayer
                     enables self-attention, a fundamental mechanism for Transformers to understand the relationships within a sequence.
 
                     Read more about in the comment section of MULTIHEADATTENTION::forward()
-                */                           
+    
+                    ====================== SELF-ATTENTION EXPLANATION ======================
+                    Self-attention is a key component of Transformer models. In this context,
+                    we pass the same input (ei) as the query, key, and value to the attention 
+                    mechanism:
+
+                    output = attention.forward(ei, ei, ei, mask);
+
+                    This is not a mistake—this is how *self*-attention works by design.
+
+                    Why pass the same input for all three?
+                    -------------------------------------
+                    - Query (Q): What we are searching for in the input.
+                    - Key   (K): What we are matching against.
+                    - Value (V): What we use to compute the final output.
+
+                    In self-attention, we want each token (or word) in the input sequence to:
+                    - Look at all other tokens (including itself),
+                    - Compute how much attention it should give to each,
+                    - And then create a new, weighted representation of itself.
+
+                    By using the same input for Q, K, and V, we allow the model to:
+                    - Capture dependencies and relationships between all tokens,
+                    - Learn which other tokens are important for understanding each token's context,
+                    - Dynamically adapt based on sequence position and content.
+
+                    This enables the model to "pay attention" to relevant tokens no matter where 
+                    they appear in the sequence—something especially useful in NLP tasks like 
+                    translation, summarization, or sentiment analysis.
+
+                    Summary:
+                    --------
+                    Self-attention = Attention(query=input, key=input, value=input)
+                    This is what allows the model to understand each token in the *context* of all others.
+
+                    For example:
+                    Input sentence: "The cat sat on the mat"
+                    The representation for "sat" will consider its attention to "cat", "on", and even "mat",
+                    allowing the model to understand its role better in the sentence.
+                    =========================================================================
+                 */                                           
                 output = attention.forward(ei, ei, ei, mask); // Attention output 
                 output = ei + output; // Residual connection around attention
 
@@ -162,6 +209,26 @@ class EncoderLayer
                 /*
                     The encoder layer should only call backward() when running in training mode and,
                     during training, gradients will flow in the reverse order
+
+                    // -----------------------------------------------------------------------------
+                    // NOTE: Backward calls inside forward() for stress testing only
+                    //
+                    // In most deep learning libraries (e.g., PyTorch, TensorFlow), forward propagation 
+                    // is responsible for computing and storing intermediate values such as activations 
+                    // and inputs, while backward propagation is triggered later — typically via a call 
+                    // like loss.backward(). This separation allows for flexibility, proper gradient 
+                    // flow through the entire model, and memory management via a computation graph.
+                    //
+                    // However, in this custom implementation, backward() calls are placed inside 
+                    // the forward() method temporarily **for stress testing purposes only**. 
+                    // This allows us to immediately verify the correctness of the attention and 
+                    // feed-forward layers' gradient calculations right after the forward pass.
+                    //
+                    // This is not standard practice and should not be used in production training code. 
+                    // In a full training setup, backward() should be invoked separately and in coordination 
+                    // with a loss function and optimizer.
+                    //
+                    // -----------------------------------------------------------------------------
                  */
                 if (is_training)
                 {
@@ -188,7 +255,27 @@ class EncoderLayer
 
                 /*
                     The encoder layer should only call backward() when running in training mode and,
-                    during training, gradients will flow in the reverse order
+                    during training, gradients will flow in the reverse 
+                    
+                    // -----------------------------------------------------------------------------
+                    // NOTE: Backward calls inside forward() for stress testing only
+                    //
+                    // In most deep learning libraries (e.g., PyTorch, TensorFlow), forward propagation 
+                    // is responsible for computing and storing intermediate values such as activations 
+                    // and inputs, while backward propagation is triggered later — typically via a call 
+                    // like loss.backward(). This separation allows for flexibility, proper gradient 
+                    // flow through the entire model, and memory management via a computation graph.
+                    //
+                    // However, in this custom implementation, backward() calls are placed inside 
+                    // the forward() method temporarily **for stress testing purposes only**. 
+                    // This allows us to immediately verify the correctness of the attention and 
+                    // feed-forward layers' gradient calculations right after the forward pass.
+                    //
+                    // This is not standard practice and should not be used in production training code. 
+                    // In a full training setup, backward() should be invoked separately and in coordination 
+                    // with a loss function and optimizer.
+                    //
+                    // -----------------------------------------------------------------------------
                  */
                 if (is_training)
                 { 
@@ -206,7 +293,6 @@ class EncoderLayer
         ~EncoderLayer()
         {            
         }
-
 };
 
 #endif

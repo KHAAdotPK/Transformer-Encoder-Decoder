@@ -178,6 +178,7 @@
 #include "./attention.hh"
 #include "./EncoderFeedForwardNetwork.hh"
 #include "./EncoderLayerNormalization.hh"
+#include "./EncoderLayerList.hh"
 #include "./EncoderLayer.hh"
 #include "./encoder.hh"
 
