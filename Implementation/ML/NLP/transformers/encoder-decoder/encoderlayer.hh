@@ -52,21 +52,67 @@ class EncoderLayer
 
     public:
         //EncoderLayer() : dimensionsOfTheModel(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER), numberOfAttentionHeads(DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER), dropOutRate(DEFAULT_DROP_OUT_RATE_HYPERPARAMETER), attention(), ffn(dimensionsOfTheModel, dropOutRate), norm1(dimensionsOfTheModel), norm2(dimensionsOfTheModel)
-        EncoderLayer() :  attention(), ffn(dimensionsOfTheModel, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER), norm1(dimensionsOfTheModel), norm2(dimensionsOfTheModel), dimensionsOfTheModel(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER), numberOfAttentionHeads(DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER), dropOutRate(DEFAULT_DROP_OUT_RATE_HYPERPARAMETER) 
+        //EncoderLayer() :  attention(), ffn(dimensionsOfTheModel, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER), norm1(dimensionsOfTheModel), norm2(dimensionsOfTheModel), dimensionsOfTheModel(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER), numberOfAttentionHeads(DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER), dropOutRate(DEFAULT_DROP_OUT_RATE_HYPERPARAMETER) 
+        /*EncoderLayer() : 
+            dimensionsOfTheModel(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER),
+            numberOfAttentionHeads(DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER), 
+            dropOutRate(DEFAULT_DROP_OUT_RATE_HYPERPARAMETER),
+            attention(dimensionsOfTheModel, numberOfAttentionHeads),
+            ffn(dimensionsOfTheModel, dropOutRate),
+            norm1(dimensionsOfTheModel),
+            norm2(dimensionsOfTheModel) 
         {  
             EncoderLayerNormalization::ENCODER_LAYER_NORMALIZATION_EPSILON_VALUE; // Replaces macro, type-safe
-        }
+        }*/
+
+        EncoderLayer() 
+            : attention(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER),
+              ffn(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER),
+              norm1(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER),
+              norm2(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER),
+              dimensionsOfTheModel(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER),
+              numberOfAttentionHeads(DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER),
+              dropOutRate(DEFAULT_DROP_OUT_RATE_HYPERPARAMETER)
+        {
+            EncoderLayerNormalization::ENCODER_LAYER_NORMALIZATION_EPSILON_VALUE; // Replaces macro, type-safe
+        }      
+
+
         /*
             @d_model, name from the paper "Attention is all we need" we call it "dimensionsOfTheModel". 
             @num_heads, Number of attention heads. 
             @dropout_rate, Dropout rate for regularization. The dropout_rate in the Transformer model is a regularization technique to prevent overfitting.
          */
         //EncoderLayer(cc_tokenizer::string_character_traits<char>::size_type d_model, cc_tokenizer::string_character_traits<char>::size_type num_heads, t dropout_rate) : dimensionsOfTheModel(d_model), dropOutRate(dropout_rate), attention(d_model, num_heads), ffn(d_model, dropout_rate), norm1(d_model), norm2(d_model)
-        EncoderLayer(cc_tokenizer::string_character_traits<char>::size_type d_model, cc_tokenizer::string_character_traits<char>::size_type num_heads, t dropout_rate) : attention(d_model, num_heads), ffn(d_model, dropout_rate), norm1(d_model), norm2(d_model), dimensionsOfTheModel(d_model), numberOfAttentionHeads(num_heads), dropOutRate(dropout_rate)
+        /*EncoderLayer(cc_tokenizer::string_character_traits<char>::size_type d_model, cc_tokenizer::string_character_traits<char>::size_type num_heads, t dropout_rate)
+            : attention(d_model, num_heads),
+              ffn(d_model, dropout_rate),
+              norm1(d_model),
+              norm2(d_model),
+              dimensionsOfTheModel(d_model),
+              numberOfAttentionHeads(num_heads),
+              dropOutRate(dropout_rate)
         {                        
-        }
+        }*/
+
+        /*
+            @d_model, name from the paper "Attention is all we need" we call it "dimensionsOfTheModel". 
+            @num_heads, Number of attention heads. 
+            @dropout_rate, Dropout rate for regularization. The dropout_rate in the Transformer model is a regularization technique to prevent overfitting.
+         */
+        EncoderLayer(cc_tokenizer::string_character_traits<char>::size_type d_model, cc_tokenizer::string_character_traits<char>::size_type num_heads, t dropout_rate)
+            : attention(d_model, num_heads),  /* Initialize attention module */
+              ffn(d_model, dropout_rate),     /* Initialize FeedForward Network */
+              norm1(d_model),                 /* Initialize Layer Normalization 1 */
+              norm2(d_model),                 /* Initialize Layer Normalization 2 */
+              dimensionsOfTheModel(d_model), 
+              numberOfAttentionHeads(num_heads), 
+              dropOutRate(dropout_rate)
+        { 
+
+        }      
         
-        Collective<t> forward(Collective<t>& ei, Collective<t>& mask)
+        Collective<t> forward(Collective<t>& ei, Collective<t>& mask, bool is_training = true) throw (ala_exception)
         {
             /*
                 The output of MULTIHEADATTENTION::forward() is typically a transformed representation of the input sequence, where each token's representation has been updated based on attention over all tokens in the sequence. In a Transformer encoder, this output is usually processed further in the following steps:
@@ -98,6 +144,8 @@ class EncoderLayer
             try 
             {
                /*
+                    Apply attention mechanism with residual connection
+
                     The forward method of the ENCODERLAYER class call the forward method of the MULTIHEADATTENTION class with the same argument ei(encoder input) passed three times for query, key, and value.
                     This might seem redundant at first glance, but there's a specific reason for it.
 
@@ -106,16 +154,21 @@ class EncoderLayer
 
                     Read more about in the comment section of MULTIHEADATTENTION::forward()
                 */                           
-                output = attention.forward(ei, ei, ei, mask); // Residual connection around attention
+                output = attention.forward(ei, ei, ei, mask); // Attention output 
                 output = ei + output; // Residual connection around attention
 
-                output = norm1.forward(ei); // Layer normalization                
+                // Apply layer normalization
+                output = norm1.forward(output); // Layer normalization after attention
                 /*
                     The encoder layer should only call backward() when running in training mode and,
                     during training, gradients will flow in the reverse order
-                 */                
-                norm1.backward(output);
+                 */
+                if (is_training)
+                {
+                    norm1.backward(output);
+                }
 
+                // Apply feed-forward network with residual connection                
                 // ************************************************************************************ //
                 //  The following commented statement has been replaced with the two statements below.  //
                 //  This change was made due to the reason explained in the comment block of the        //
@@ -129,15 +182,18 @@ class EncoderLayer
                 // and helps mitigate the vanishing gradient problem.         
                 Collective<t> residual = ffn.forward(output); // Feed-forward network output
                 output = output + residual; // Residual connection around FFN
-                
-                // The encoder layer should only call backward() when running in training mode
+                                
                 // The output of the feed-forward network is then passed through layer normalization to stabilize the training process.                
-                output = norm2.forward(output); // Layer normalization
+                output = norm2.forward(output); // Apply layer normalization after feed-forward network
+
                 /*
                     The encoder layer should only call backward() when running in training mode and,
                     during training, gradients will flow in the reverse order
-                 */ 
-                norm2.backward(output);
+                 */
+                if (is_training)
+                { 
+                    norm2.backward(output);
+                }
             }
             catch(ala_exception& e)
             {
