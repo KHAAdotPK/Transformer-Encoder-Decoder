@@ -251,8 +251,8 @@ class Attention // Is all you need.
                 //scores = scores / static_cast<double>(scaleFactor);
                 //std::cout << "Type of scaleFactor: " << typeid(decltype(scaleFactor)).name() << std::endl;
 
-                ADHOC_IMPLEMENTATION_OF_MASK_QUERY(scores, mask);
-                ADHOC_IMPLEMENTATION_OF_MASK_KEY(scores, mask);
+                ADHOC_IMPLEMENTATION_OF_MASK_QUERY(scores, mask, false);
+                ADHOC_IMPLEMENTATION_OF_MASK_KEY(scores, mask, false);
                 /* ADHOC_DEBUG_MACRO(scores); */
                 
                 /*

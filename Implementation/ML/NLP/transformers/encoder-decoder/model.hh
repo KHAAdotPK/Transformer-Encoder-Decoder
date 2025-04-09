@@ -633,7 +633,7 @@ class Model
                                           that was originally all zeros remains all zeros throughout the encoding process.
                                         - The following statement explicitly enforces this constraint by applying a masking operation
                                  */
-                                /*ADHOC_IMPLEMENTATION_OF_MASK(eo, mask);*/
+                                ADHOC_IMPLEMENTATION_OF_MASK_QUERY(eo, mask, true);
 
                                 std::cout<< "::: DEBUG DATA -: Encoder Output(eo) :- :::"  << std::endl;
                                 std::cout<< "Columns: " << eo.getShape().getNumberOfColumns() << ", Rows: " << eo.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
