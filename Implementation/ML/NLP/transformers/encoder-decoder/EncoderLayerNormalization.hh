@@ -71,6 +71,16 @@ class EncoderLayerNormalization
     // Trainable Parameters: current implementation, gamma and beta are initialized but not yet properly set up as trainable parameters
     Collective<t> gamma, beta;
 
+    /* 
+        "The computation graph records these operations." 
+        The above statement refers to how this class manually tracks intermediate values during the 
+        forward pass to enable gradient computation in the backward pass        
+        Thus, what is a "Computation Graph"?
+        - A computation graph is a directed graph where nodes represent operations or variables, and edges represent dependencies between them.
+        - Or in our case... A computation graph is a record of mathematical operations performed during the forward pass, along with their dependencies (inputs/outputs).
+        - In frameworks like PyTorch, this graph is built automatically. In this custom code of this "normalization layer", 
+          it got manually emulated by storing intermediate values in the following variables/private properties
+     */
     Collective<t> input, input_mean, input_variance, input_normalized;
     Collective<t> input_dispersion, input_variance_stabilized;
 
@@ -91,7 +101,7 @@ class EncoderLayerNormalization
             try
             {   
                 /*         
-                    Initialize gamma (scaling parameter) to ones 
+                    Initialize gamma (scaling parameter) to ones(TODO, nitialization: gamma=1 is correct, but consider adding options for custom init)
                     Even though it starts as ones, it gets updated during training in EncoderLayerNormalization::backward()
                  */
                 gamma = Numcy::ones<t>(DIMENSIONS{d_model, 1, NULL, NULL});
@@ -104,7 +114,7 @@ class EncoderLayerNormalization
             try
             {
                 /*
-                    Initialize beta (shifting parameter) to zeros
+                    Initialize beta (shifting parameter) to zeros(TODO, nitialization: beta=0 is correct, but consider adding options for custom init)
                     Even though it starts as zeros, it gets updated during training in EncoderLayerNormalization::backward()
                  */
                 beta = Numcy::zeros<t>(DIMENSIONS{d_model, 1, NULL, NULL});
@@ -300,7 +310,13 @@ class EncoderLayerNormalization
                 this->input_mean = Numcy::mean(input);                
                 // Compute variance of the input tensor
                 this->input_variance = Numcy::variance(input, this->input_mean);
-                // Variance stabilization
+                /*
+                    Variance stabilization:
+                    The variance stabilization step ensures that the variance is not too small, which can lead to numerical instability during normalization.
+                    By adding a small epsilon value to the variance, we prevent division by zero or very small numbers during the normalization step.
+
+                    TODO, Using std::max(input_variance, epsilon) is unusual and typically just variance + epsilon suffices 
+                 */
                 this->input_variance_stabilized = this->input_variance + std::max((this->input_variance)[0], epsilon);
                                 
                 // We will need to normalize input: input_dispersion / sqrt(variance + epsilon)
