@@ -202,6 +202,9 @@ class EncoderLayer
                     =========================================================================
                  */                                           
                 output = attention.forward(ei, ei, ei, mask); // Attention output 
+
+                attention.backward(output); // Backpropagation logic for attention layer
+                
                 output = ei + output; // Residual connection around attention
 
                 // Apply layer normalization

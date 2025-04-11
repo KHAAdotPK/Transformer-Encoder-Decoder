@@ -5,13 +5,27 @@
  */
 
 /*
-    Attention(Q,K,V) = softmax(Q*Numcy::transpose(K)) * 1 / sqrt(d_k)) * V
+    ------------------------------
+    | Forward Propogation Detail |
+    ------------------------------
+
+    Attention Output(O):         
+    O = Attention(Q,K,V) = softmax(Q*Numcy::transpose(K)) * 1 / sqrt(d_k)) * V
     Where:
     - Q is query
     - K is key
     - d_k is the dimensions per attention head
+ */
+/*
+    -------------------------------  
+    | Backward Propogation Detail |
+    -------------------------------
+    TODO,
 
-    scaling factor = 1 / sqrt(d_k)
+ */   
+/*
+    The Scaling Factor = 1 / sqrt(d_k):
+    In this implementation of the Attention class, "d_k" is synonymous with "dimensionsOfAttentioHead".
 
     Without scaling: 
     - The dot products of Q and K(transposed) can become large when d_k is large
@@ -21,7 +35,8 @@
     - By multiplying the dot products(output of softmax function) by "scaling factor", we normalize them
     - This keeps the softmax output in a numerically stable range
     - Thus "scaling factor" ensures gradients don't vanish or explode
-
+ */ 
+/*
     Taking the floor:    
     The floor function returns the greatest integer that is less than or equal to the given value.
     As a result, if the input to floor is less than 1, it will return 0.
@@ -50,6 +65,20 @@ class Attention // Is all you need.
     // Projection matrices for Q, K, V and final projection matrix
     Collective<t> queryWeights, keyWeights, valueWeights, outputWeights;
     t scaleFactor /* Scaling factor for attention scores */;
+        
+    /* 
+        "The computation graph records these operations." 
+        The above statement refers to how this class manually tracks intermediate values during the 
+        forward pass to enable gradient computation in the backward pass        
+        Thus, what is a "Computation Graph"?
+        - A computation graph is a directed graph where nodes represent operations or variables, and edges represent dependencies between them.
+        - Or in our case... A computation graph is a record of mathematical operations performed during the forward pass, along with their dependencies (inputs/outputs).
+        - In frameworks like PyTorch, this graph is built automatically. In this custom code of this "attention layer", 
+          it got manually emulated by storing intermediate values in the following variables/private properties
+     */
+    Collective<t> cached_query, cached_key, cached_value;
+    Collective<t> cached_attention_weights;
+    Collective<t> cached_output_before_projection;
 
     public:
         //  Default constructor
@@ -109,6 +138,16 @@ class Attention // Is all you need.
                 // scaleFactor = std::sqrt(d_model / num_heads);  // Scaling factor for stability
              */
             scaleFactor = (1.0 / std::sqrt(dimensionsOfAttentionHead));
+        }
+        
+        Collective<t> backward(Collective<t>& incoming_gradient) throw (ala_exception)
+        {
+            /*
+                The backward pass of the attention mechanism involves computing gradients with respect to the input tensors (queries, keys, values) and the weights.
+                This is typically done using backpropagation through the attention mechanism.
+             */
+            
+            return Collective<t>{NULL, DIMENSIONS{0, 0, NULL, NULL}};
         }
 
         /*
@@ -177,12 +216,22 @@ class Attention // Is all you need.
             Collective<t> attention_weights;
 
             Collective<t> output;
+
+            this->cached_value = ei_value; // Cache the value for later use in backward pass
             
             try
             {
-                query = Numcy::matmul<t>(ei_query, queryWeights) * sqrt(1.0 / dimensionsOfTheModel);                
-                key = Numcy::matmul<t>(ei_key, keyWeights) * sqrt(1.0 / dimensionsOfTheModel);                
-                value = Numcy::matmul<t>(ei_value, valueWeights) * sqrt(1.0 / dimensionsOfTheModel);
+                // Q=XW-subscript(q)
+                query = Numcy::matmul<t>(ei_query, queryWeights) * scaleFactor;
+                // K=XW-subscript(k)
+                key = Numcy::matmul<t>(ei_key, keyWeights) * scaleFactor;
+                // V=XW-subscript(v)                
+                value = Numcy::matmul<t>(ei_value, valueWeights) * scaleFactor;
+
+                // Cache the transformed Q, K, V for backward pass
+                this->cached_query = query;
+                this->cached_key = key;
+                this->cached_value = value;
                 
                 // Zero out padded rows in the projected value matrix (after matmul(ei_value, valueWeights) but before attention)                 
                 for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < value.getShape().getDimensionsOfArray().getNumberOfInnerArrays(); k++)
@@ -272,15 +321,22 @@ class Attention // Is all you need.
                     Check Attention Class:
                     If attention implementation already accepts a mask parameter, pass src_mask from the encoder when calling forward()
                  */
-
+                
                 // Apply softmax to get attention weights   
                 attention_weights = softmax<t>(scores);
-                         
+
+                // Cache attention weights for backward pass
+                this->cached_attention_weights = attention_weights;
+                                         
                 /* ADHOC_DEBUG_MACRO(value); */
                 
                 // Multiply by value
-                output = Numcy::matmul<t>(attention_weights, value);  
-                // Apply output transformation
+                output = Numcy::matmul<t>(attention_weights, value);
+                
+                // Cache output(before projection) for backward pass
+                this->cached_output_before_projection = output;
+                
+                // Final Projected Output: Attention Projection Output = OW-subscript(o) Matrix
                 output = Numcy::matmul<t>(output, outputWeights);                
             }
             catch(ala_exception& e)
