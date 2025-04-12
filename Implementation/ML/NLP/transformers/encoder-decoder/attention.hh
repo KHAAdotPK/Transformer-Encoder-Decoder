@@ -5,6 +5,14 @@
  */
 
 /*
+    Multi-Head Attention (MHA) Layer
+    --------------------------------
+    A neural network layer that allows the model to focus on different parts of the input sequence simultaneously.
+    It splits the input into multiple "heads", applies attention separately in each head, and then combines the results.
+    This helps the model capture different types of relationships and patterns in the data
+ */ 
+
+/*
     ------------------------------
     | Forward Propogation Detail |
     ------------------------------
@@ -65,7 +73,7 @@ class Attention // Is all you need.
     // Projection matrices for Q, K, V and final projection matrix
     Collective<t> queryWeights, keyWeights, valueWeights, outputWeights;
     t scaleFactor /* Scaling factor for attention scores */;
-        
+         
     /* 
         "The computation graph records these operations." 
         The above statement refers to how this class manually tracks intermediate values during the 
@@ -140,12 +148,60 @@ class Attention // Is all you need.
             scaleFactor = (1.0 / std::sqrt(dimensionsOfAttentionHead));
         }
         
+        /*
+            The backward pass of the attention mechanism involves computing gradients with respect to the input tensors (queries, keys, values) and the weights.
+            
+            @incoming_gradient (dL/dY, Y = OWo and hence dL/dOWo but then Y = Output as well), the incoming gradient from the next layer in the network.
+            @return, The gradient with respect to the input tensors (queries, keys, values) and the weights.            
+         */
         Collective<t> backward(Collective<t>& incoming_gradient) throw (ala_exception)
         {
             /*
                 The backward pass of the attention mechanism involves computing gradients with respect to the input tensors (queries, keys, values) and the weights.
                 This is typically done using backpropagation through the attention mechanism.
              */
+
+            try 
+            {   
+                /*  
+                    1. Gradient w.r.t. Output Projection Weights (Wo), dL/dWo = O^T * dL/dY
+                    Where O = cached_output_before_projection, Wo = outputWeights, dL/dY = incoming_gradient when Y = OWo
+                 */
+                Collective<t> gradient_output_weights = Numcy::matmul<t>(Numcy::transpose(cached_output_before_projection), incoming_gradient);
+
+                /*
+                    2. Gradient w.r.t. Attention Output (O), dL/dO = dL/dOutput * Wo^T 
+                    where Wo is the "output projection weights", dL/dOutput is the "final Projected Output" (a.k.a incoming_gradient) 
+                    herefore, dL/dO is the gradient of the loss with respect to the attention output (a.k.a gradient_attention_output)
+                 */
+                Collective<t> gradient_attention_output = Numcy::matmul<t>(incoming_gradient, Numcy::transpose(outputWeights));
+
+                /*
+                    3. Gradient w.r.t. Attention Weights (A), dL/dA = dL/dO * V^T
+                    where V is the "value weights", dL/dO is the "gradient_attention_output" 
+                    herefore, dL/dA is the gradient of the loss with respect to the attention weights (a.k.a gradient_attention_weights)
+                 */
+                Collective<t> gradient_attention_weights = Numcy::matmul<t>(gradient_attention_output, Numcy::transpose(cached_value));
+
+                /*                    
+                    4. Gradient w.r.t. Value Vectors (V), dL/dV = A^T * dL/dO
+                    where A is the attention weights, dL/dO is the gradient_attention_output
+                 */
+                Collective<t> gradient_value = Numcy::matmul<t>(Numcy::transpose(cached_attention_weights), gradient_attention_output);
+
+                /*
+                    5. Gradient w.r.t. Attention Scores (S), dL/dS = dL/dA * softmax'(A)
+                    where A is the "attention weights", dL/dA is the "gradient_attention_weights" 
+                    herefore, dL/dS is the gradient of the loss with respect to the attention scores (a.k.a gradient_attention_scores)
+                 */
+                /*Collective<t> gradient_attention_scores = Numcy::softmax_backward(gradient_attention_weights, cached_attention_weights);*/
+                                                           
+            } 
+            catch (ala_exception& e) 
+            {
+                throw ala_exception(cc_tokenizer::String<char>("Attention::backward() -> ") + e.what());
+            }
+            
             
             return Collective<t>{NULL, DIMENSIONS{0, 0, NULL, NULL}};
         }
@@ -221,6 +277,10 @@ class Attention // Is all you need.
             
             try
             {
+                /*
+                    (where X is the input to the MHA(Multi-Head Attention) layer, the one used for the value projection)
+                 */
+
                 // Q=XW-subscript(q)
                 query = Numcy::matmul<t>(ei_query, queryWeights) * scaleFactor;
                 // K=XW-subscript(k)
@@ -327,16 +387,26 @@ class Attention // Is all you need.
 
                 // Cache attention weights for backward pass
                 this->cached_attention_weights = attention_weights;
-                                         
-                /* ADHOC_DEBUG_MACRO(value); */
-                
+                                                                         
                 // Multiply by value
                 output = Numcy::matmul<t>(attention_weights, value);
-                
-                // Cache output(before projection) for backward pass
+                                
+                /*
+                    - O  
+                      Output from attention before output projection (a.k.a. cached_output_before_projection)
+                 */
                 this->cached_output_before_projection = output;
                 
-                // Final Projected Output: Attention Projection Output = OW-subscript(o) Matrix
+                /*
+                     Final Projected Output: Attention Projection Output = O*Wo = OWo Matrix
+
+                    - O
+                      Output from attention before output projection (a.k.a output)
+                    - Wo 
+                      Output projection weights (a.k.a outputWeights)
+                    
+                    Let Y = O*Wo = OWo Matrix (a.k.a Output matrix as well)
+                 */
                 output = Numcy::matmul<t>(output, outputWeights);                
             }
             catch(ala_exception& e)
