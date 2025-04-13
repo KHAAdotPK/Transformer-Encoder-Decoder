@@ -185,13 +185,13 @@ class Attention // Is all you need.
 
                 /*                    
                     4. Gradient w.r.t. Value Vectors (V), dL/dV = A^T * dL/dO
-                    where A is the attention weights, dL/dO is the gradient_attention_output
+                    where A is the attention weights(a.k.a cached_attention_weights or just attention_weights), dL/dO is the gradient_attention_output
                  */
                 Collective<t> gradient_value = Numcy::matmul<t>(Numcy::transpose(cached_attention_weights), gradient_attention_output);
 
                 /*
-                    5. Gradient w.r.t. Attention Scores (S), dL/dS = dL/dA * softmax'(A)
-                    where A is the "attention weights", dL/dA is the "gradient_attention_weights" 
+                    5. Gradient w.r.t. Attention Scores, dL/dS = dL/dA * softmax'(A)
+                    where A is the attention weights(a.k.a cached_attention_weights), dL/dA is the "gradient_attention_weights" 
                     herefore, dL/dS is the gradient of the loss with respect to the attention scores (a.k.a gradient_attention_scores)
                  */
                 /*Collective<t> gradient_attention_scores = Numcy::softmax_backward(gradient_attention_weights, cached_attention_weights);*/
@@ -382,10 +382,14 @@ class Attention // Is all you need.
                     If attention implementation already accepts a mask parameter, pass src_mask from the encoder when calling forward()
                  */
                 
-                // Apply softmax to get attention weights   
+                // Apply softmax to get (attention weights a.k.a A)  
                 attention_weights = softmax<t>(scores);
-
-                // Cache attention weights for backward pass
+                
+                /*
+                    - A
+                      Attention weights, which are the normalized scores indicating how much focus each word should receive.
+                      These weights are soem times called just "attention weights"  and other times are called "cached attention weights"
+                 */
                 this->cached_attention_weights = attention_weights;
                                                                          
                 // Multiply by value
@@ -393,7 +397,7 @@ class Attention // Is all you need.
                                 
                 /*
                     - O  
-                      Output from attention before output projection (a.k.a. cached_output_before_projection)
+                      Output from attention before output projection
                  */
                 this->cached_output_before_projection = output;
                 
