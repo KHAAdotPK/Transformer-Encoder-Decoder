@@ -763,6 +763,85 @@ Collective<T> softmax(Collective<T>& a, bool verbose = false) throw (ala_excepti
     return e_a_minus_max_divided_by_e_a_minus_max_sum;
 }
 
+/*
+   dL/dx_j = sum_of_k dL/dy_k * dy_k/dx_j
+   --------------------------------------    
+   Where dL/dy_k(is "Collective<t> grad_output" here) is the gradient(gradient_attention_weights) of the loss with respect to the softmax output y_k(visit Attention::forward() and look for line scores = softmax(), so scores is y_k a.k.a cached_attention_weights).
+   The Jacobian matrix of the softmax function is given by: dy_k/dx_j = softmax(x_j) * (delta(j, k) - softmax(x_k))...
+   Wwhere delta(j, k) is the Kronecker delta function, which is 1 if j = k and 0 otherwise. 
+   This means that the gradient of the softmax_backward function with respect to its input is a matrix where each element is computed as follows:
+   - If j = k, the element is softmax(x_j) * (1 - softmax(x_j)) -> (softmax_output[i * grad_output.getShape().getNumberOfColumns() + j] * (1 - softmax_output[i * grad_output.getShape().getNumberOfColumns() + k])) 
+   - If j != k, the element is -softmax(x_j) * (softmax(x_k) ->  (- softmax_output[i * grad_output.getShape().getNumberOfColumns() + j] * softmax_output[i * grad_output.getShape().getNumberOfColumns() + k])
+ */
+
+/*
+    @brief Computes the gradient of the softmax function with respect to its input.
+
+    This function computes the gradient of the softmax function using the chain rule. 
+    The gradient is computed as follows:
+      - For each element in the output, if it corresponds to the same index as the input, 
+        it is multiplied by (1 - softmax_output).
+      - For all other elements, it is multiplied by -softmax_output.
+
+    Parameters:
+      - grad_output: Collective<T> 
+        The gradient of the loss with respect to the softmax output.
+      - softmax_output: Collective<T> 
+        The output of the softmax function.
+
+    Returns:
+      - Collective<T>
+        The gradient of the softmax function with respect to its input.
+ */
+template <typename t>
+Collective<t> softmax_backward(Collective<t>& grad_output, Collective<t>& softmax_output) throw (ala_exception)
+{
+    // grad_output: dL/dy (gradient of the loss w.r.t. softmax output)
+    // softmax_output: y = softmax(x), the output from the softmax layer
+    
+    Collective<t> grad_input = Numcy::zeros<t>(grad_output.getShape());
+
+    try
+    {        
+        // Loop over each sample in the batch
+        for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < grad_output.getShape().getDimensionsOfArray().getNumberOfInnerArrays(); i++)
+        { // Loop over rows (batch size)
+        
+            // Loop over each element of the softmax output (j: output dimension)
+            for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < grad_output.getShape().getNumberOfColumns(); j++)
+            { // Loop over columns (output dimension)
+            
+                // Loop again for Jacobian-vector product (k: softmax dimension)
+                for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < grad_output.getShape().getNumberOfColumns(); k++)
+                {
+                    if (j == k)
+                    {
+                        // Diagonal element of the Jacobian: s_j * (1 - s_j)
+                        grad_input[i * grad_output.getShape().getNumberOfColumns() + j] += 
+                        softmax_output[i * grad_output.getShape().getNumberOfColumns() + j] * 
+                        (1 - softmax_output[i * grad_output.getShape().getNumberOfColumns() + k]) * 
+                        grad_output[i * grad_output.getShape().getNumberOfColumns() + k];
+                    } 
+                    else 
+                    {
+                        // Off-diagonal element: -s_j * s_k
+                        grad_input[i * grad_output.getShape().getNumberOfColumns() + j] -= 
+                        softmax_output[i * grad_output.getShape().getNumberOfColumns() + j] * 
+                        softmax_output[i * grad_output.getShape().getNumberOfColumns() + k] * 
+                        grad_output[i * grad_output.getShape().getNumberOfColumns() + k];
+                    }
+                }
+            }
+        }
+    }
+    catch (ala_exception& e)
+    {
+        throw ala_exception(cc_tokenizer::String<char>("softmax_backward() -> ") + cc_tokenizer::String<char>(e.what()));
+    }
+
+    return grad_input;
+}
+
 
 /*          
     @brief Computes sine and cosine values for a templated type and fills even and odd indices of the position encoding array.

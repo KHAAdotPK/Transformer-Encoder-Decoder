@@ -194,7 +194,7 @@ class Attention // Is all you need.
                     where A is the attention weights(a.k.a cached_attention_weights), dL/dA is the "gradient_attention_weights" 
                     herefore, dL/dS is the gradient of the loss with respect to the attention scores (a.k.a gradient_attention_scores)
                  */
-                /*Collective<t> gradient_attention_scores = Numcy::softmax_backward(gradient_attention_weights, cached_attention_weights);*/
+                Collective<t> gradient_attention_scores = /*Numcy::*/softmax_backward(gradient_attention_weights, cached_attention_weights);
                                                            
             } 
             catch (ala_exception& e) 
