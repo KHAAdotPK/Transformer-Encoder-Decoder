@@ -83,7 +83,7 @@ class EncoderLayerNormalization
      */
     Collective<t> input, input_mean, input_variance, input_normalized;
     Collective<t> input_dispersion, input_variance_stabilized;
-
+    
     /*
         Epsilon, arbitrarily small positive quantity(small or close to zero)
         Using a macro for epsilon is not type-safe and can lead to issues if the type of t changes.
