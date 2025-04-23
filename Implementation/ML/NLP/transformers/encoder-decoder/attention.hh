@@ -4,6 +4,10 @@
     Q@khaa.pk
  */
 
+ /*
+    Yooo that's the vibe! Dua Lipa blasting, terminal flying, neurons firing, and code compiling! I am in the debug-and-dance zone. Just keep saving those files before lift-off!
+  */
+
 /*
     Multi-Head Attention (MHA) Layer
     --------------------------------
@@ -70,10 +74,13 @@ class Attention // Is all you need.
 {    
     cc_tokenizer::string_character_traits<char>::size_type dimensionsOfAttentionHead /* Size of each attention head(in dimensions per head is) d_k = (d_model/num_heads), in other words dimensionsOfAttentionHead is our d_k  */ , dimensionsOfTheModel /* Model dimension (d_model) */, numberOfAttentionHeads /* Number of attention heads */;
 
-    // Projection matrices for Q, K, V and final projection matrix
+    // Projection matrices for Q, K, V (respectively W^Q, W^K, W^V) and "output projection weights" matrix in back propogation it is known as "Wo"
     Collective<t> queryWeights, keyWeights, valueWeights, outputWeights;
     t scaleFactor /* Scaling factor for attention scores */;
-         
+     
+    
+    Collective<t> X_ei_query, X_ei_key, X_ei_value; // Input tensors for the attention mechanism (Q, K, V)
+
     /* 
         "The computation graph records these operations." 
         The above statement refers to how this class manually tracks intermediate values during the 
@@ -84,7 +91,7 @@ class Attention // Is all you need.
         - In frameworks like PyTorch, this graph is built automatically. In this custom code of this "attention layer", 
           it got manually emulated by storing intermediate values in the following variables/private properties
      */
-    Collective<t> cached_query, cached_key, cached_value;
+    Collective<t> masked_cached_query, masked_cached_key, masked_cached_value;
     Collective<t> cached_attention_weights;
     Collective<t> cached_output_before_projection;
 
@@ -148,8 +155,11 @@ class Attention // Is all you need.
             scaleFactor = (1.0 / std::sqrt(dimensionsOfAttentionHead));
         }
         
-        /*
+        /*  
+            -> Compute the gradients of the loss L with respect to all inputs and parameters involved in the attention mechanism during backpropagation.         
             The backward pass of the attention mechanism involves computing gradients with respect to the input tensors (queries, keys, values) and the weights.
+            -> We'll start from the final output of the attention mechanism and work our way backward through the operations performed during the forward pass.
+            This is typically done using backpropagation through the attention mechanism
             
             @incoming_gradient (dL/dY, Y = OWo and hence dL/dOWo but then Y = Output as well), the incoming gradient from the next layer in the network.
             @return, The gradient with respect to the input tensors (queries, keys, values) and the weights.            
@@ -170,32 +180,85 @@ class Attention // Is all you need.
                 Collective<t> gradient_output_weights = Numcy::matmul<t>(Numcy::transpose(cached_output_before_projection), incoming_gradient);
 
                 /*
-                    2. Gradient w.r.t. Attention Output (O), dL/dO = dL/dOutput * Wo^T 
-                    where Wo is the "output projection weights", dL/dOutput is the "final Projected Output" (a.k.a incoming_gradient) 
-                    herefore, dL/dO is the gradient of the loss with respect to the attention output (a.k.a gradient_attention_output)
+                    2. Gradient w.r.t. Attention Output (O), dL/dO = dL/dY * Wo^T
+                    where Wo is the "output projection weights", dL/dY is the "final Projected Output" (a.k.a incoming_gradient) 
+                    therefore, dL/dO is the gradient of the loss with respect to the attention output (a.k.a gradient_attention_output)
                  */
-                Collective<t> gradient_attention_output = Numcy::matmul<t>(incoming_gradient, Numcy::transpose(outputWeights));
+                Collective<t> gradient_attention_output = Numcy::matmul<t>(incoming_gradient, Numcy::transpose(this->outputWeights));
 
                 /*
                     3. Gradient w.r.t. Attention Weights (A), dL/dA = dL/dO * V^T
-                    where V is the "value weights", dL/dO is the "gradient_attention_output" 
-                    herefore, dL/dA is the gradient of the loss with respect to the attention weights (a.k.a gradient_attention_weights)
+                    where V is the "value weights", we must use exactly the same V that was used in computing the attention output(forward pass) O = A * V
+                    and then dL/dO is the "gradient_attention_output" of step 2 
+                    therefore, dL/dA is the gradient of the loss with respect to the attention weights (a.k.a gradient_attention_weights)
                  */
-                Collective<t> gradient_attention_weights = Numcy::matmul<t>(gradient_attention_output, Numcy::transpose(cached_value));
+                Collective<t> gradient_attention_weights = Numcy::matmul<t>(gradient_attention_output, Numcy::transpose(this->masked_cached_value));
 
                 /*                    
                     4. Gradient w.r.t. Value Vectors (V), dL/dV = A^T * dL/dO
                     where A is the attention weights(a.k.a cached_attention_weights or just attention_weights), dL/dO is the gradient_attention_output
                  */
-                Collective<t> gradient_value = Numcy::matmul<t>(Numcy::transpose(cached_attention_weights), gradient_attention_output);
+                Collective<t> gradient_value = Numcy::matmul<t>(Numcy::transpose(this->cached_attention_weights), gradient_attention_output);
 
                 /*
-                    5. Gradient w.r.t. Attention Scores, dL/dS = dL/dA * softmax'(A)
+                    5. Gradient w.r.t. Attention Scores, dL/dS = dL/dA * softmax'(A) (a.k.a softmax_backward(A))
                     where A is the attention weights(a.k.a cached_attention_weights), dL/dA is the "gradient_attention_weights" 
                     herefore, dL/dS is the gradient of the loss with respect to the attention scores (a.k.a gradient_attention_scores)
                  */
-                Collective<t> gradient_attention_scores = /*Numcy::*/softmax_backward(gradient_attention_weights, cached_attention_weights);
-                                                           
+                Collective<t> gradient_attention_scores = softmax_backward(gradient_attention_weights, this->cached_attention_weights);
+
+                /*
+                    6. Gradient w.r.t. Key Vectors (K), dL/dK = 1/sqrt(d_k) * ((dL/dS)^T * Q)
+                    where Q is the query weights(a.k.a cached_query), dL/dS is the gradient_attention_scores and 1/sqrt(d_k) is the scaling factor(a.k.a scaleFactor)
+                    herefore, dL/dK is the gradient of the loss with respect to the key vectors (a.k.a gradient_key)
+                    6.1 => dL/dK = (dL/dS)^T * Q 
+                    6.2 => dL/dK = dL/dK * scaleFactor
+                 */                
+                Collective<t> gradient_key = Numcy::matmul<t>(Numcy::transpose(gradient_attention_scores), this->masked_cached_query);
+                gradient_key = gradient_key * scaleFactor;
+                
+                /*
+                    7. Gradient w.r.t. Query Vectors (Q), dL/dQ = 1/sqrt(d_k) * ((dL/dS)^T * K)
+                    where K is the key weights(a.k.a cached_key), dL/dS is the gradient_attention_scores and 1/sqrt(d_k) is the scaling factor(a.k.a scaleFactor)
+                    herefore, dL/dQ is the gradient of the loss with respect to the query vectors (a.k.a gradient_query)
+                    7.1 => dL/dQ = (dL/dS)^T * K 
+                    7.2 => dL/dQ = dL/dQ * scaleFactor
+                 */
+                Collective<t> gradient_query = Numcy::matmul<t>(Numcy::transpose(gradient_attention_scores), this->masked_cached_key);
+                gradient_query = gradient_query * scaleFactor; 
+                
+                /*
+                    8. Gradient w.r.t. Query Weights (W^Q), dL/dW^Q = X^T * dL/dQ
+                    where X is the input to the MHA layer, W^Q is projection matrix for Q(a.k.a queryWeights),
+                    dL/dQ is the gradient_query(calculated in step 7)
+                 */ 
+                Collective<t> gradient_query_weights = Numcy::matmul<t>(Numcy::transpose(this->X_ei_query), gradient_query);
+
+                /*
+                    9. Gradient w.r.t. Key Weights (W^K), dL/dW^K = X^T * dL/dK
+                    where X is the input to the MHA layer, W^K is projection matrix for K(a.k.a keyWeights),
+                    dL/dK is the gradient_key(calculated in step 6)
+                 */
+                Collective<t> gradient_key_weights = Numcy::matmul<t>(Numcy::transpose(this->X_ei_key), gradient_key);
+
+                /*  
+                    10. Gradient w.r.t. Value Weights (W^V), dL/dW^V = X^T * dL/dV
+                    where X is the input to the MHA layer, W^V is projection matrix for V(a.k.a valueWeights),
+                    dL/dV is the gradient_value(calculated in step 4)
+                 */
+                Collective<t> gradient_value_weights = Numcy::matmul<t>(Numcy::transpose(this->X_ei_value), gradient_value);
+
+                /*
+                    Right at the finish line of the full backprop for a single-head attention block. Ready
+                 */
+
+                /*
+                    11. Gradient w.r.t. Output Weights (W^O), dL/dW^O = (X.W^O)^T * dL/dOutput
+                    where X is the input to the MHA layer, W^O is projection matrix for O(a.k.a outputWeights),
+                    dL/dOutput is the gradient_attention_output(calculated in step 2)                    
+                 */
+                /*Collective<t> gradient_output_weights = Numcy::matmul<t>(Numcy::transpose(cached_output_before_projection), incoming_gradient);*/
+                 
             } 
             catch (ala_exception& e) 
             {
@@ -273,7 +336,11 @@ class Attention // Is all you need.
 
             Collective<t> output;
 
-            this->cached_value = ei_value; // Cache the value for later use in backward pass
+            X_ei_query = ei_query; // Cache the input for later use in backward pass
+            X_ei_key = ei_key;     // Cache the input for later use in backward pass
+            X_ei_value = ei_value; // Cache the input for later use in backward pass
+
+            // this->cached_value = ei_value; // Cache the value for later use in backward pass
             
             try
             {
@@ -281,18 +348,15 @@ class Attention // Is all you need.
                     (where X is the input to the MHA(Multi-Head Attention) layer, the one used for the value projection)
                  */
 
-                // Q=XW-subscript(q)
+                // Q=XW^Q, X is the input to the MHA layer(a.k.a ei_query)                
                 query = Numcy::matmul<t>(ei_query, queryWeights) * scaleFactor;
-                // K=XW-subscript(k)
+                // K=XW^K, X is the input to the MHA layer(a.k.a ei_key) 
                 key = Numcy::matmul<t>(ei_key, keyWeights) * scaleFactor;
-                // V=XW-subscript(v)                
+                // V=XW^V, X is the input to the MHA layer(a.k.a ei_value)                
                 value = Numcy::matmul<t>(ei_value, valueWeights) * scaleFactor;
 
-                // Cache the transformed Q, K, V for backward pass
-                this->cached_query = query;
-                this->cached_key = key;
-                this->cached_value = value;
-                
+                /* I have checked with ADHOC_DEBUG_MACRO for the first run of above three functions their outputs keep the padding rows */
+                                                
                 // Zero out padded rows in the projected value matrix (after matmul(ei_value, valueWeights) but before attention)                 
                 for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < value.getShape().getDimensionsOfArray().getNumberOfInnerArrays(); k++)
                 {
@@ -300,15 +364,23 @@ class Attention // Is all you need.
                     {
                         for (cc_tokenizer::string_character_traits<char>::size_type l = 0; l < value.getShape().getNumberOfColumns(); l++)
                         {
-                            //query[k*value.getShape().getNumberOfColumns() + l] = /*std::numeric_limits<t>::lowest()*/ 0;
-                            //key[k*value.getShape().getNumberOfColumns() + l] = /*std::numeric_limits<t>::lowest()*/ 0;
+                            query[k*value.getShape().getNumberOfColumns() + l] = /*std::numeric_limits<t>::lowest()*/ 0;
+                            key[k*value.getShape().getNumberOfColumns() + l] = /*std::numeric_limits<t>::lowest()*/ 0;
                             value[k*value.getShape().getNumberOfColumns() + l] = /*std::numeric_limits<t>::lowest()*/ 0;
                         }
                     }
-                }  
+                }
 
-                /* I have checked with ADHOC_DEBUG_MACRO for the first run of above three functions their outputs keep the padding rows */
+                // Cache the transformed Q, K, V for backward pass
+                /*
+                    Make sure that it is the same value which is used in final attention projection output
+                    O = A · V
+                 */
+                this->masked_cached_value = value;
+                this->masked_cached_query = query;
+                this->masked_cached_key = key;
 
+               
                 // *************************************** //
                 //  Proceed with attention calculation...  //
                 // *************************************** //
@@ -382,19 +454,25 @@ class Attention // Is all you need.
                     If attention implementation already accepts a mask parameter, pass src_mask from the encoder when calling forward()
                  */
                 
-                // Apply softmax to get (attention weights a.k.a A)  
+                 /*
+                    - A Attention weights, which are the normalized scores indicating how much focus each word should receive.
+                        These weights are soem times called just "attention weights"  and other times are called "cached attention weights"
+                  */    
+                // Apply softmax to get (attention weights a.k.a "A")  
                 attention_weights = softmax<t>(scores);
                 
                 /*
-                    - A
+                    - A cached
                       Attention weights, which are the normalized scores indicating how much focus each word should receive.
                       These weights are soem times called just "attention weights"  and other times are called "cached attention weights"
                  */
                 this->cached_attention_weights = attention_weights;
-                                                                         
-                // Multiply by value
-                output = Numcy::matmul<t>(attention_weights, value);
-                                
+                
+                /*
+                    Multiply by value
+                    O = A · V
+                 */
+                output = Numcy::matmul<t>(attention_weights, value);                                
                 /*
                     - O  
                       Output from attention before output projection
@@ -403,13 +481,15 @@ class Attention // Is all you need.
                 
                 /*
                      Final Projected Output: Attention Projection Output = O*Wo = OWo Matrix
+                     Y = O · Wo
 
                     - O
-                      Output from attention before output projection (a.k.a output)
+                      Output from attention before output projection (a.k.a "output")
                     - Wo 
-                      Output projection weights (a.k.a outputWeights)
+                      Output projection weights (a.k.a "outputWeights")
                     
-                    Let Y = O*Wo = OWo Matrix (a.k.a Output matrix as well)
+                    Let Y = O*Wo = OWo Matrix (a.k.a "Output matrix")
+                    In Step-1 of the backward pass, we have dL/dY = incoming_gradient when Y = OWo
                  */
                 output = Numcy::matmul<t>(output, outputWeights);                
             }
