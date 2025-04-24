@@ -227,41 +227,41 @@ class Attention // Is all you need.
             try 
             {   
                 /*  
-                    1. Gradient w.r.t. Output Projection Weights (Wo), dL/dWo = O^T * dL/dY
+                    1. Gradient of Loss w.r.t. Output Projection Weights (Wo), dL/dWo = O^T * dL/dY
                     Where O = cached_output_before_projection, Wo = outputWeights, dL/dY = incoming_gradient when Y = OWo
                  */
                 Collective<t> gradient_output_weights = Numcy::matmul<t>(Numcy::transpose(cached_output_before_projection), incoming_gradient);
 
                 /*
-                    2. Gradient w.r.t. Attention Output (O), dL/dO = dL/dY * Wo^T
+                    2. Gradient of Loss w.r.t. Attention Output (O), dL/dO = dL/dY * Wo^T
                     where Wo is the "output projection weights", dL/dY is the "final Projected Output" (a.k.a incoming_gradient) 
                     therefore, dL/dO is the gradient of the loss with respect to the attention output (a.k.a gradient_attention_output)
                  */
                 Collective<t> gradient_attention_output = Numcy::matmul<t>(incoming_gradient, Numcy::transpose(this->outputWeights));
 
                 /*
-                    3. Gradient w.r.t. Attention Weights (A), dL/dA = dL/dO * V^T
+                    3. Gradient of Loss w.r.t. Attention Weights (A), dL/dA = dL/dO * V^T
                     where V is the "value weights", we must use exactly the same V that was used in computing the attention output(forward pass) O = A * V
                     and then dL/dO is the "gradient_attention_output" of step 2 
-                    therefore, dL/dA is the gradient of the loss with respect to the attention weights (a.k.a gradient_attention_weights)
+                    therefore, dL/dA is the "gradient of the loss with respect to the attention weights" (a.k.a gradient_attention_weights)
                  */
                 Collective<t> gradient_attention_weights = Numcy::matmul<t>(gradient_attention_output, Numcy::transpose(this->masked_cached_value));
 
                 /*                    
-                    4. Gradient w.r.t. Value Vectors (V), dL/dV = A^T * dL/dO
+                    4. Gradient Loss w.r.t. Value Vector (V = X.W^V), dL/dV = A^T * dL/dO
                     where A is the attention weights(a.k.a cached_attention_weights or just attention_weights), dL/dO is the gradient_attention_output
                  */
                 Collective<t> gradient_value = Numcy::matmul<t>(Numcy::transpose(this->cached_attention_weights), gradient_attention_output);
 
                 /*
-                    5. Gradient w.r.t. Attention Scores, dL/dS = dL/dA * softmax'(A) (a.k.a softmax_backward(A))
+                    5. Gradient of Loss w.r.t. Attention Scores, dL/dS = dL/dA * softmax'(A) (a.k.a softmax_backward(A))
                     where A is the attention weights(a.k.a cached_attention_weights), dL/dA is the "gradient_attention_weights" 
-                    herefore, dL/dS is the gradient of the loss with respect to the attention scores (a.k.a gradient_attention_scores)
+                    herefore, dL/dS is the "gradient of the loss with respect to the attention scores" (a.k.a gradient_attention_scores)
                  */
                 Collective<t> gradient_attention_scores = softmax_backward(gradient_attention_weights, this->cached_attention_weights);
 
                 /*
-                    6. Gradient w.r.t. Key Vectors (K), dL/dK = 1/sqrt(d_k) * ((dL/dS)^T * Q)
+                    6. Gradient of Loss w.r.t. Key Vector (K = X.W^K), dL/dK = 1/sqrt(d_k) * ((dL/dS)^T * Q)
                     where Q is the query weights(a.k.a cached_query), dL/dS is the gradient_attention_scores and 1/sqrt(d_k) is the scaling factor(a.k.a scaleFactor)
                     herefore, dL/dK is the gradient of the loss with respect to the key vectors (a.k.a gradient_key)
                     6.1 => dL/dK = (dL/dS)^T * Q 
@@ -271,7 +271,7 @@ class Attention // Is all you need.
                 gradient_key = gradient_key * scaleFactor;
                 
                 /*
-                    7. Gradient w.r.t. Query Vectors (Q), dL/dQ = 1/sqrt(d_k) * ((dL/dS)^T * K)
+                    7. Gradient of Loss w.r.t. Query Vector (Q = X.W^Q), dL/dQ = 1/sqrt(d_k) * ((dL/dS)^T * K)
                     where K is the key weights(a.k.a cached_key), dL/dS is the gradient_attention_scores and 1/sqrt(d_k) is the scaling factor(a.k.a scaleFactor)
                     herefore, dL/dQ is the gradient of the loss with respect to the query vectors (a.k.a gradient_query)
                     7.1 => dL/dQ = (dL/dS)^T * K 
@@ -287,24 +287,28 @@ class Attention // Is all you need.
                     ---------------------------------------------------------------------------------------------------------------------------------
                  */
                 /*
-                    8. Gradient w.r.t. Query Weights (W^Q), dL/dW^Q = X^T * dL/dQ
+                    8. Gradient of Loss w.r.t. Query Weights (W^Q), dL/dW^Q = X^T * dL/dQ
                     where X is the input to the MHA layer, W^Q is projection matrix for Q(a.k.a queryWeights),
                     dL/dQ is the gradient_query(calculated in step 7)
                  */ 
                 Collective<t> gradient_query_weights = Numcy::matmul<t>(Numcy::transpose(this->X_ei_query), gradient_query);
                 /*
-                    9. Gradient w.r.t. Key Weights (W^K), dL/dW^K = X^T * dL/dK
+                    9. Gradient of Loss w.r.t. Key Weights (W^K), dL/dW^K = X^T * dL/dK
                     where X is the input to the MHA layer, W^K is projection matrix for K(a.k.a keyWeights),
                     dL/dK is the gradient_key(calculated in step 6)
                  */
                 Collective<t> gradient_key_weights = Numcy::matmul<t>(Numcy::transpose(this->X_ei_key), gradient_key);
                 /*  
-                    10. Gradient w.r.t. Value Weights (W^V), dL/dW^V = X^T * dL/dV
+                    10. Gradient of Loss w.r.t. Value Weights (W^V), dL/dW^V = X^T * dL/dV
                     where X is the input to the MHA layer, W^V is projection matrix for V(a.k.a valueWeights),
                     dL/dV is the gradient_value(calculated in step 4)
                  */
                 Collective<t> gradient_value_weights = Numcy::matmul<t>(Numcy::transpose(this->X_ei_value), gradient_value);
-                
+
+                /*
+                    TODO, 
+                    put comments here about the learning rate and why we are multiplying the gradients with it      
+                 */
                 gradient_query_weights = gradient_query_weights * learning_rate;
                 this->queryWeights = this->queryWeights - gradient_query_weights;
 
@@ -312,11 +316,23 @@ class Attention // Is all you need.
                 this->keyWeights = this->keyWeights - gradient_key_weights;
 
                 gradient_value_weights = gradient_value_weights * learning_rate;
-                this->valueWeights = this->valueWeights - gradient_value_weights;  
-                
-                Collective<t> dX_query = Numcy::matmul(gradient_query_weights, Numcy::transpose(this->queryWeights)); // dL/dX_query = dL/dW^Q * (W^Q)^T
-                Collective<t> dX_key   = Numcy::matmul(gradient_key_weights, Numcy::transpose(this->keyWeights)); // dL/dX_key = dL/dW^K * (W^K)^T 
-                Collective<t> dX_value = Numcy::matmul(gradient_value_weights, Numcy::transpose(this->valueWeights)); // dL/dX_value = dL/dW^V * (W^V)^T
+                this->valueWeights = this->valueWeights - gradient_value_weights;
+                                
+                /* 
+                    Backpropogation: gradients flowing backwards from Q, K, V to their respectve Xs or inputs 
+                    Chain Rule Logic in terms of Q and then same for K and V as well ...
+                    - When Q = X.W^Q 
+                      - W^Q is the projection matrix for Q, and it is constant  
+                      - and X is the input to the MHA layer.                    
+                    then dL/dX (changes in X affect the final loss) = dL/dQ * dQ/dX
+                    there fore, dL/dX = dL/dQ * (W^Q)^T
+                */
+                /* Gradient of Loss w.r.t the input (X) that produced, Q(= X.W^Q) => dL/dX_query = dL/dQ * (W^Q)^T */
+                Collective<t> dX_query = Numcy::matmul(gradient_query, Numcy::transpose(this->queryWeights));
+                /* Gradient of Loss w.r.t the input (X) that produced, K(= X.W^K) => dL/dX_key = dL/dK * (W^K)^T */
+                Collective<t> dX_key   = Numcy::matmul(gradient_key, Numcy::transpose(this->keyWeights));
+                /* Gradient of Loss w.r.t the input (X) that produced, V(= X.W^V) => dL/dX_value = dL/dV * (W^V)^T */
+                Collective<t> dX_value = Numcy::matmul(gradient_value, Numcy::transpose(this->valueWeights));
                 
                 input_gradient = dX_query + dX_key + dX_value; // Combine gradients from all three inputs
             } 
