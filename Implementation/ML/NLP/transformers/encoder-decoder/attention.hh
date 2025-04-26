@@ -305,9 +305,13 @@ class Attention // Is all you need.
                  */
                 Collective<t> gradient_value_weights = Numcy::matmul<t>(Numcy::transpose(this->X_ei_value), gradient_value);
 
-                /*
-                    TODO, 
-                    put comments here about the learning rate and why we are multiplying the gradients with it      
+                /*`                                                       
+                    Learning Rate Scaling:
+                    - During weight updates, we multiply the computed gradients by the learning rate.
+                    - This controls the size of the update step taken towards minimizing the loss.
+                    - A smaller learning rate means smaller updates (more stable but slower learning).
+                    - A larger learning rate means bigger updates (faster but can cause instability if too large).
+                    - Mathematically:  new_weight = old_weight - learning_rate * gradient
                  */
                 gradient_query_weights = gradient_query_weights * learning_rate;
                 this->queryWeights = this->queryWeights - gradient_query_weights;
@@ -326,15 +330,42 @@ class Attention // Is all you need.
                       - and X is the input to the MHA layer.                    
                     then dL/dX (changes in X affect the final loss) = dL/dQ * dQ/dX
                     there fore, dL/dX = dL/dQ * (W^Q)^T
-                */
+                 */
+                /*
+                    Backpropagation: gradients flowing backward from Q, K, and V to their respective input X tensors.
+                    Chain Rule Logic in terms of Q (similar for K and V as well):
+                    
+                    - When Q = X.W^Q:
+                      - W^Q is the projection matrix for Q (learnable weights), considered constant during backpropagation at this point.
+                      - X is the original input to the MHA layer.
+
+                    Then, by chain rule:
+                      dL/dX_from_Q (changes in X affect the final loss from Q side) = dL/dQ * (dQ/dX) 
+                                                                                    = dL/dQ * (W^Q)^T
+
+                    Similarly:
+                      dL/dX_from_K (changes in X affect the final loss from K side) = dL/dK * (W^K)^T
+                      dL/dX_from_V (changes in X affect the final loss from V side) = dL/dV * (W^V)^T
+
+                    Since X was used three times to create Q, K, and V separately,
+                    the total gradient with respect to X is the **sum** of these three contributions.
+                    
+                    That is:
+                    
+                    dL/dX = dL/dX (from Q path) + dL/dX (from K path) + dL/dX (from V path)
+
+                    Finally, total dL/dX = dL/dX_from_Q + dL/dX_from_K + dL/dX_from_V
+                    because the input X branches into three projections (Q, K, V) during the forward pass.
+                 */
                 /* Gradient of Loss w.r.t the input (X) that produced, Q(= X.W^Q) => dL/dX_query = dL/dQ * (W^Q)^T */
-                Collective<t> dX_query = Numcy::matmul(gradient_query, Numcy::transpose(this->queryWeights));
+                Collective<t> input_gradient_from_query = Numcy::matmul(gradient_query, Numcy::transpose(this->queryWeights));
                 /* Gradient of Loss w.r.t the input (X) that produced, K(= X.W^K) => dL/dX_key = dL/dK * (W^K)^T */
-                Collective<t> dX_key   = Numcy::matmul(gradient_key, Numcy::transpose(this->keyWeights));
+                Collective<t> input_gradient_from_key = Numcy::matmul(gradient_key, Numcy::transpose(this->keyWeights));
                 /* Gradient of Loss w.r.t the input (X) that produced, V(= X.W^V) => dL/dX_value = dL/dV * (W^V)^T */
-                Collective<t> dX_value = Numcy::matmul(gradient_value, Numcy::transpose(this->valueWeights));
+                Collective<t> input_gradient_from_value = Numcy::matmul(gradient_value, Numcy::transpose(this->valueWeights));
                 
-                input_gradient = dX_query + dX_key + dX_value; // Combine gradients from all three inputs
+                // Summing all the gradients flowing into X
+                incoming_gradient = input_gradient_from_query = input_gradient_from_query * learning_rate;
             } 
             catch (ala_exception& e) 
             {
