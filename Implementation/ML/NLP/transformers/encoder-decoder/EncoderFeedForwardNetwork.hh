@@ -126,16 +126,18 @@ class EncoderFeedForwardNetwork
             DIMENSIONS dim2 = DIMENSIONS{d_model, 4 * d_model, NULL, NULL};  // Reduce back
 
             // Initialize dimensions/values for weight matrices W1, W2
-            weights1 = Numcy::Random::randn<t>(dim1);
-            weights2 = Numcy::Random::randn<t>(dim2);
+            /*weights1 = Numcy::Random::randn<t>(dim1);
+            weights2 = Numcy::Random::randn<t>(dim2);*/
+
+            weights1 = Numcy::Random::randn_xavier<t>(DIMENSIONS{4 * d_model, d_model, NULL, NULL});
+            weights2 = Numcy::Random::randn_xavier<t>(DIMENSIONS{d_model, 4 * d_model, NULL, NULL});
 
             // Initialize dimensions/values for biases
             bias1 = Numcy::Random::randn<t>(DIMENSIONS{4 * d_model, 1, NULL, NULL});
             bias2 = Numcy::Random::randn<t>(DIMENSIONS{d_model, 1, NULL, NULL});
 
             /*bias1 = Numcy::zeros<t>(DIMENSIONS{4 * d_model, 1, NULL, NULL});
-            bias2 = Numcy::zeros<t>(DIMENSIONS{d_model, 1, NULL, NULL});*/
-            
+            bias2 = Numcy::zeros<t>(DIMENSIONS{d_model, 1, NULL, NULL});*/            
         }
 
         Collective<t> forward(Collective<t>& input, bool is_training = true)
@@ -161,6 +163,10 @@ class EncoderFeedForwardNetwork
                 if (is_training && dropOutRate > 0)
                 {
                     z2 = Numcy::dropout(z2, dropOutRate);
+                }
+                else
+                {
+                    z2 = z2 * (1 - dropOutRate); // Scale the output during inference (to account for deactivated neurons during training)
                 }
 
                 return z2;
