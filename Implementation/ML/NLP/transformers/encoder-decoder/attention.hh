@@ -365,14 +365,14 @@ class Attention // Is all you need.
                 Collective<t> input_gradient_from_value = Numcy::matmul(gradient_value, Numcy::transpose(this->valueWeights));
                 
                 // Summing all the gradients flowing into X
-                incoming_gradient = input_gradient_from_query = input_gradient_from_query * learning_rate;
+                /*incoming_gradient*/ input_gradient = input_gradient_from_query = input_gradient_from_query * learning_rate;
             } 
             catch (ala_exception& e) 
             {
                 throw ala_exception(cc_tokenizer::String<char>("Attention::backward() -> ") + e.what());
             }
                         
-            return input_gradient;
+            return /*incoming_gradient*/ input_gradient; // Placeholder return value
         }
 
         /*
@@ -426,7 +426,7 @@ class Attention // Is all you need.
             /*
                 Linear transformations, compute queries, keys, and values
              */
-
+             
             /*
                 It makes sense to use singular names (query, key, value) because:
                 - Each line is processed independently (not as a batch).

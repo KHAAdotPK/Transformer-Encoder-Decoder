@@ -93,6 +93,12 @@ class EncoderFeedForwardNetwork
     Collective<t> weights1, weights2; // Weights, W1 and W2
     Collective<t> bias1, bias2; // Biases
 
+    Collective<t> cached_a1; // Cached activation from the first layer (for backpropagation)
+    Collective<t> cached_input; // Cached input (for backpropagation)
+    Collective<t> cached_z1; // Cached input to the first layer (for backpropagation)
+    
+    static constexpr t DEFAULT_FEED_FORWARD_NETWORK_LAYER_LEARNING_RATE = 0.01;
+
     public:
                 
         EncoderFeedForwardNetwork(cc_tokenizer::string_character_traits<char>::size_type d_model, t dropout_rate) : dimensionsOfTheModel(d_model), dropOutRate(dropout_rate)
@@ -140,18 +146,117 @@ class EncoderFeedForwardNetwork
             bias2 = Numcy::zeros<t>(DIMENSIONS{d_model, 1, NULL, NULL});*/            
         }
 
+        /*
+            @incoming_gradienbt,  // it is dL/dz2, the gradient of the loss with respect to the output of the FFN (z2)
+            @learning_rate,       // learning_rate is the step size used in the weight update rule. It controls how much to adjust the weights based on the computed gradients.
+         */
+        Collective<t> backward( Collective<t>& incoming_gradient, t learning_rate = DEFAULT_FEED_FORWARD_NETWORK_LAYER_LEARNING_RATE) throw (ala_exception)
+        {
+
+            /*
+                The backward pass of the feedforward network involves computing gradients with respect to the weights and biases of the two linear transformations.
+                This is typically done using backpropagation through the network.
+            */
+
+            Collective<t> input_gradient; // Gradient with respect to the input tensors (input, weights1, weights2, bias1, bias2)
+
+            try
+            {                  
+                /*
+                    1. dL/da1 = dL/dz2 · weights2^T
+                    dL/da1 = gradient of loss with respect to activation(ReLu) of the first layer (a1) and this 
+                    dl/dz2 is the incoming gradient from the next layer.                     
+                 */
+                Collective<t> gradient_a1 = Numcy::matmul(incoming_gradient, Numcy::transpose(weights2));
+                
+                /* 
+                    2. dL/dweights2 = gradient of loss with resppect to weights2,  a1^T = cached_a1^T, dL/dz2  = incoming_gradient 
+                    dL/dweights2 = cached_a1^T * incoming_gradient
+                */ 
+                Collective<t> gradient_weights2 = Numcy::matmul(Numcy::transpose(cached_a1), incoming_gradient);
+
+                /*
+                    3. dL/dbias2 = gradient of loss with resppect to bias2 dL/dbias2 = incoming_gradient
+                 */
+                Collective<t> gradient_bias2 = Numcy::sum(incoming_gradient);
+
+                /*
+                    4. dL/dz1 = dL/da1 · ReLU'(z1) Compute dL/dz1 from dL/da1 and ReLU derivative
+
+                    - ReLU'(z1) is the derivative of the ReLU activation function applied to z1.
+                    - The derivative of ReLU is 1 for positive values and 0 for negative values.
+                    - This means that the gradient will only flow back through the neurons that were activated (i.e., those with positive values in z1).
+                    - The gradient of the loss with respect to the input of the first layer (z1) is computed by multiplying the gradient of the loss with respect to the activation (gradient_a1) by the derivative of ReLU and the transpose of weights1.
+                    - This step is crucial for backpropagation, as it allows the gradients to flow backward through the network.
+                 */                
+                Collective<t> gradient_z1 = Numcy::ReLU_prime(cached_z1);
+                gradient_z1 = gradient_a1 * gradient_z1; // Element-wise multiplication
+
+                /*
+                    5. dL/dweights1 = gradient of loss with resppect to weights1, z1^T = cached_z1^T, dL/dz1  = gradient_z1 
+                    dL/dweights1 = cached_z1^T * gradient_z1                    
+                 */
+                Collective<t> gradient_weights1 = Numcy::matmul(Numcy::transpose(cached_input), gradient_z1);
+
+                /*
+                    6. dL/dbias1 = gradient of loss with resppect to bias1 dL/dbias1 = gradient_z1
+                 */
+                Collective<t> gradient_bias1 = Numcy::sum(gradient_z1);
+
+                /*
+                    7. Update weights and biases using gradients and learning rate
+                 */
+                Collective<t> residual = gradient_weights2 * learning_rate;
+                weights2 = weights2 - residual; // Update weights2
+                residual = gradient_weights1 * learning_rate;   
+                weights1 = weights1 - residual; // Update weights1
+                residual = gradient_bias2 * learning_rate;
+                bias2 = bias2 - residual; // Update bias2
+                residual = gradient_bias1 * learning_rate;
+                bias1 = bias1 - residual; // Update bias1
+                
+                /*
+                    8. Compute gradients with respect to the original input (input) by propagating gradients backward through the linear projection layers.                    
+                    dL/dinput = dL/dz1 * weights1^T
+                    where weights1 is the projection matrix for the first layer, dL/dz1 is the gradient of the loss with respect to the input of the first layer (a.k.a gradient_z1)
+                    therefore, dL/dinput is the gradient of the loss with respect to the input of the FFN (a.k.a input_gradient)
+                    This step is crucial for backpropagation, as it allows the gradients to flow backward through the network.
+                    This is the final step in the backward pass of the feedforward network.
+                    The computed gradients can then be used to update the weights and biases of the network using an optimization algorithm (e.g., SGD, Adam).
+
+                    The input_gradient is the gradient of the loss with respect to the input of the FFN, which can be used for further backpropagation in the overall model
+
+                    input_gradient = gradient_z1 * weights1^T
+                    where weights1 is the projection matrix for the first layer, gradient_z1 is the gradient of the loss with respect to the input of the first layer (a.k.a cached_z1)
+                 */
+
+                    input_gradient = Numcy::matmul(gradient_z1, Numcy::transpose(weights1)); // Gradient with respect to the input tensors (input, weights1, weights2, bias1, bias2)
+                    // Note: The cached_input is used here to compute the gradient with respect to the input of the FFN.
+            }
+            catch (ala_exception& e)
+            {
+                throw ala_exception(cc_tokenizer::String<char>("EncoderFeedForwardNetwork::backward() -> ") + cc_tokenizer::String<char>(e.what()));
+            }      
+                        
+            return input_gradient; // Return the gradient with respect to the input of the FFN
+        }
+
         Collective<t> forward(Collective<t>& input, bool is_training = true)
         {
             //std::cout<< "input columns = " << input.getShape().getNumberOfColumns() << ", " << input.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
             //std::cout<< "weights1 columns = " << weights1.getShape().getNumberOfColumns() << ", " << weights1.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
-            
+                        
             try
             {                                   
+                this->cached_input = input; // Cache the input for backpropagation
+
                 // First Linear Transformation
                 Collective<t> z1 = Numcy::matmul(input, weights1) + bias1;
+                this->cached_z1 = z1; // Cache the input for backpropagation
                 
                 // Apply ReLU Activation Function. ReLU, short for Rectified Linear Unit
                 Collective<t> a1 = Numcy::ReLU(z1); 
+                this->cached_a1 = a1; // Cache the activation for backpropagation
                 
                 // Second Linear Transformation
                 Collective<t> z2 = Numcy::matmul(a1, weights2) + bias2; 

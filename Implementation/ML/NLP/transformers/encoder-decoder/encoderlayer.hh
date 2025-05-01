@@ -203,9 +203,16 @@ class EncoderLayer
                  */                                           
                 output = attention.forward(ei, ei, ei, mask); // Attention output 
 
-                attention.backward(output); // Backpropagation logic for attention layer
+                output = attention.backward(output); // Backpropagation logic for attention layer
                 
                 output = ei + output; // Residual connection around attention
+                
+                output = ffn.forward(output); // Feed-forward network output
+
+                if (is_training)
+                {
+                    output = ffn.backward(output); // Backpropagation logic for feed-forward network
+                }
 
                 // Apply layer normalization
                 output = norm1.forward(output); // Layer normalization after attention
@@ -235,7 +242,7 @@ class EncoderLayer
                  */
                 if (is_training)
                 {
-                    norm1.backward(output);
+                    output = norm1.backward(output);
                 }
 
                 // Apply feed-forward network with residual connection                
@@ -282,7 +289,7 @@ class EncoderLayer
                  */
                 if (is_training)
                 { 
-                    norm2.backward(output);
+                    output = norm2.backward(output);
                 }
             }
             catch(ala_exception& e)
