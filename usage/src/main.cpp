@@ -171,8 +171,6 @@ int main(int argc, char* argv[])
     }
 
     Model<double> model;
-
-
            
     try {
         if (arg_epoch.argc)
@@ -208,6 +206,6 @@ int main(int argc, char* argv[])
     {       
        std::cerr << "main() -> " << e.what() << std::endl;
     }
-        
+    
     return 0;
 }

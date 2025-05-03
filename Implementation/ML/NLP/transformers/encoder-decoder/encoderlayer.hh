@@ -203,15 +203,26 @@ class EncoderLayer
                  */                                           
                 output = attention.forward(ei, ei, ei, mask); // Attention output 
 
-                output = attention.backward(output); // Backpropagation logic for attention layer
-                
+                if (is_training)
+                {
+#ifdef STRESS_TEST_BACKWARD_PASS_IN_FORWARD_PASS
+                    // Backpropagation logic for layer normalization
+                    // The backward() method of the EncoderLayerNormalization class is called to compute gradients for the layer normalization step and it should not be here                     
+                    output = attention.backward(output); // Backpropagation logic for attention layer
+#endif                    
+                }
+                                
                 output = ei + output; // Residual connection around attention
                 
                 output = ffn.forward(output); // Feed-forward network output
 
                 if (is_training)
                 {
+#ifdef STRESS_TEST_BACKWARD_PASS_IN_FORWARD_PASS
+                    // Backpropagation logic for layer normalization
+                    // The backward() method of the EncoderLayerNormalization class is called to compute gradients for the layer normalization step and it should not be here                                        
                     output = ffn.backward(output); // Backpropagation logic for feed-forward network
+#endif                      
                 }
 
                 // Apply layer normalization
@@ -242,7 +253,11 @@ class EncoderLayer
                  */
                 if (is_training)
                 {
+#ifdef STRESS_TEST_BACKWARD_PASS_IN_FORWARD_PASS
+                    // Backpropagation logic for layer normalization
+                    // The backward() method of the EncoderLayerNormalization class is called to compute gradients for the layer normalization step and it should not be here                     
                     output = norm1.backward(output);
+#endif
                 }
 
                 // Apply feed-forward network with residual connection                
@@ -288,8 +303,12 @@ class EncoderLayer
                     // -----------------------------------------------------------------------------
                  */
                 if (is_training)
-                { 
+                {
+#ifdef STRESS_TEST_BACKWARD_PASS_IN_FORWARD_PASS
+                    // Backpropagation logic for layer normalization
+                    // The backward() method of the EncoderLayerNormalization class is called to compute gradients for the layer normalization step and it should not be here                       
                     output = norm2.backward(output);
+#endif  
                 }
             }
             catch(ala_exception& e)

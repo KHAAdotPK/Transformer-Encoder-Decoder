@@ -434,7 +434,7 @@ class Attention // Is all you need.
 
                 The "scores" matrix will always be square if, ei_query and ei_key has the same shape... 
                 Which is true in the case of this implementation and...
-                that is why we can do away with just a query mask and we donot need a seperate query mask 
+                that is why we can do away with just a query mask and we do not need a separate query mask 
              */
             Collective<t> query, key, value, scores;
             /*
@@ -454,22 +454,47 @@ class Attention // Is all you need.
             
             try
             {
+
+                /*
+                    Use one and only one of the following scaling strategies:
+
+                    1. Option 1: Scale Q and K during projections:
+                        - Q = X * W^Q / sqrt(d_k)
+                        - K = X * W^K / sqrt(d_k)
+                        - V = X * W^V (no scaling needed in either case)
+                        scores = query · key^T;
+                    
+                    2. Option 2: Scale scores after computing them:
+                        - Q = X * W^Q
+                        - K = X * W^K
+                        - V = X * W^V (no scaling needed in either case)
+                        scores = query · key^T / sqrt(d_k);    
+                 */
+
                 /*
                     (where X is the input to the MHA(Multi-Head Attention) layer, the one used for the value projection)
                  */
 
+                /**********************************************************************************************************************************************************/
+                /*Note: Only query and key are scaled by the square root of the head dimension (d_k) in the forward pass                                                  */
+                /*      because the attention scores are computed as the dot product of query and key.                                                                    */
+                /*      This scaling prevents the dot-product values from growing too large in magnitude, which would push softmax into regions with very small gradients.*/
+                /**********************************************************************************************************************************************************/ 
                 // Q: XW^Q, X is the input to the MHA layer(a.k.a ei_query)                
                 query = Numcy::matmul<t>(ei_query, queryWeights) * scaleFactor;
                 // K: XW^K, X is the input to the MHA layer(a.k.a ei_key) 
                 key = Numcy::matmul<t>(ei_key, keyWeights) * scaleFactor;
                 // V: XW^V, X is the input to the MHA layer(a.k.a ei_value)                
-                value = Numcy::matmul<t>(ei_value, valueWeights) * scaleFactor;
+                value = Numcy::matmul<t>(ei_value, valueWeights); // No scaling for V
 
                 /* I have checked with ADHOC_DEBUG_MACRO for the first run of above three functions their outputs keep the padding rows */
                 
                 /*
                     Masking has to be consistently applied in both forward and backward passes to avoid leaking gradient through padded tokens.                  
                     Zero out padded rows in the projected value matrix (after matmul(ei_value, valueWeights) but before attention)
+
+                    Note:-
+                    Scores corresponding to masked tokens should be set to -inf (or a very negative number) before softmax so they get zero weight.
                  */
                 for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < value.getShape().getDimensionsOfArray().getNumberOfInnerArrays(); k++)
                 {
@@ -500,9 +525,12 @@ class Attention // Is all you need.
                 // *************************************** //
 
                 /* Compute scaled dot-product attention scores */
-                scores = Numcy::matmul<t>(query, Numcy::transpose(key)) * sqrt(1.0 / dimensionsOfTheModel); 
+                scores = Numcy::matmul<t>(query, Numcy::transpose(key)); 
                 static_assert(std::is_same<cc_tokenizer::allocator<double>, cc_tokenizer::allocator<double>>::value, "Double allocator specialization missing");
 
+                /* ********************************************** */
+                /* IT IS HERE JUST FOR THE DOCUMENTATION PURPOSES */
+                /* ********************************************** */
                 /**
                  * WORKAROUND IMPLEMENTATION FOR SCALAR DIVISION
                  * 
@@ -540,14 +568,15 @@ class Attention // Is all you need.
                  * - Maintains proper dimensionality in output
                  * - Preserves exception safety guarantees
                  */
-                Collective<t> divisor = Numcy::zeros<t>(DIMENSIONS{1, 1, NULL, NULL});    
-                divisor[0] = scaleFactor;
-                scores = scores / divisor;                                
-                //scores = scores / static_cast<double>(scaleFactor);
-                //std::cout << "Type of scaleFactor: " << typeid(decltype(scaleFactor)).name() << std::endl;
+                /* // Collective<t> divisor = Numcy::zeros<t>(DIMENSIONS{1, 1, NULL, NULL});    
+                   // divisor[0] = scaleFactor;
+                   // scores = scores / divisor;*/
+                /* // scores = scores / static_cast<double>(scaleFactor);
+                   // std::cout << "Type of scaleFactor: " << typeid(decltype(scaleFactor)).name() << std::endl;*/
 
                 ADHOC_IMPLEMENTATION_OF_MASK_QUERY(scores, mask, false);
                 ADHOC_IMPLEMENTATION_OF_MASK_KEY(scores, mask, false);
+
                 /* ADHOC_DEBUG_MACRO(scores); */
                 
                 /*
@@ -570,7 +599,7 @@ class Attention // Is all you need.
                 
                  /*
                     - A Attention weights, which are the normalized scores indicating how much focus each word should receive.
-                        These weights are soem times called just "attention weights"  and other times are called "cached attention weights"
+                        These weights are sometimes called just "attention weights"  and other times are called "cached attention weights"
                   */    
                 // Apply softmax to get (attention weights a.k.a "A")  
                 attention_weights = softmax<t>(scores);
@@ -578,7 +607,7 @@ class Attention // Is all you need.
                 /*
                     - A cached
                       Attention weights, which are the normalized scores indicating how much focus each word should receive.
-                      These weights are soem times called just "attention weights"  and other times are called "cached attention weights"
+                      These weights are sometimes called just "attention weights"  and other times are called "cached attention weights"
                  */
                 this->cached_attention_weights = attention_weights;
                 
