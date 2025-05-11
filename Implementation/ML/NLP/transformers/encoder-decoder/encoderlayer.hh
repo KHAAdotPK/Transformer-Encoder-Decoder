@@ -49,7 +49,7 @@ class EncoderLayer
 {       
     Attention<t> attention;
     EncoderFeedForwardNetwork<t> ffn; // Forward Feed Network
-    EncoderLayerNormalization<t> norm1, norm2; // Layer Normalization
+    EncoderLayerNormalization<t> /*norm1*/ attention_norm, /*norm2*/ ffn_norm; // Layer Normalization
     
     cc_tokenizer::string_character_traits<char>::size_type dimensionsOfTheModel, numberOfAttentionHeads;
     t dropOutRate;
@@ -72,8 +72,8 @@ class EncoderLayer
         EncoderLayer() 
             : attention(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER),
               ffn(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER),
-              norm1(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER),
-              norm2(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER),
+              /*norm1*/ attention_norm(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER),
+              /*norm2*/ ffn_norm(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER),
               dimensionsOfTheModel(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER),
               numberOfAttentionHeads(DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER),
               dropOutRate(DEFAULT_DROP_OUT_RATE_HYPERPARAMETER)
@@ -110,8 +110,8 @@ class EncoderLayer
         EncoderLayer(cc_tokenizer::string_character_traits<char>::size_type d_model, cc_tokenizer::string_character_traits<char>::size_type num_heads, t dropout_rate)
             : attention(d_model, num_heads),  /* Initialize attention module */
               ffn(d_model, dropout_rate),     /* Initialize FeedForward Network */
-              norm1(d_model),                 /* Initialize Layer Normalization 1 */
-              norm2(d_model),                 /* Initialize Layer Normalization 2 */
+              /*norm1*/ attention_norm(d_model),                 /* Initialize Layer Normalization 1 */
+              /*norm2*/ ffn_norm(d_model),                 /* Initialize Layer Normalization 2 */
               dimensionsOfTheModel(d_model), 
               numberOfAttentionHeads(num_heads), 
               dropOutRate(dropout_rate)
@@ -226,7 +226,7 @@ class EncoderLayer
                 }
 
                 // Apply layer normalization
-                output = norm1.forward(output); // Layer normalization after attention
+                output = /*norm1*/ attention_norm.forward(output); // Layer normalization after attention
                 /*
                     The encoder layer should only call backward() when running in training mode and,
                     during training, gradients will flow in the reverse order
@@ -256,7 +256,7 @@ class EncoderLayer
 #ifdef STRESS_TEST_BACKWARD_PASS_IN_FORWARD_PASS
                     // Backpropagation logic for layer normalization
                     // The backward() method of the EncoderLayerNormalization class is called to compute gradients for the layer normalization step and it should not be here                     
-                    output = norm1.backward(output);
+                    output = /*norm1*/ attention_norm.backward(output);
 #endif
                 }
 
@@ -276,7 +276,7 @@ class EncoderLayer
                 output = output + residual; // Residual connection around FFN
                                 
                 // The output of the feed-forward network is then passed through layer normalization to stabilize the training process.                
-                output = norm2.forward(output); // Apply layer normalization after feed-forward network
+                output = /*norm2*/ ffn_norm.forward(output); // Apply layer normalization after feed-forward network
 
                 /*
                     The encoder layer should only call backward() when running in training mode and,
@@ -307,7 +307,7 @@ class EncoderLayer
 #ifdef STRESS_TEST_BACKWARD_PASS_IN_FORWARD_PASS
                     // Backpropagation logic for layer normalization
                     // The backward() method of the EncoderLayerNormalization class is called to compute gradients for the layer normalization step and it should not be here                       
-                    output = norm2.backward(output);
+                    output = /*norm2*/ ffn_norm.backward(output);
 #endif  
                 }
             }
