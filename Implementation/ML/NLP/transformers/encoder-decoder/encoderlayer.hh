@@ -49,6 +49,17 @@ class EncoderLayer
 {       
     Attention<t> attention;
     EncoderFeedForwardNetwork<t> ffn; // Forward Feed Network
+    /*
+        The two layer norms correspond to:
+        After self-attention and feed-forward network, we apply layer normalization to stabilize the training process.
+        
+        Layer Normalization
+        -------------------
+        - Layer normalization is a technique to normalize the inputs across the features for each training example.
+        - It helps stabilize and accelerate training by reducing internal covariate shift.
+        - It is applied after the multi-head attention and feed-forward network in the encoder layer.
+        - The normalization is done independently for each training example, making it suitable for variable-length sequences.
+     */
     EncoderLayerNormalization<t> /*norm1*/ attention_norm, /*norm2*/ ffn_norm; // Layer Normalization
     
     cc_tokenizer::string_character_traits<char>::size_type dimensionsOfTheModel, numberOfAttentionHeads;
@@ -117,9 +128,32 @@ class EncoderLayer
               dropOutRate(dropout_rate)
         { 
 
-        }      
+        }
         
-        Collective<t> forward(Collective<t>& ei, Collective<t>& mask, bool is_training = true) throw (ala_exception)
+        /**
+         * @brief Forward pass through the Transformer Encoder Layer.
+         *
+         * This method processes the input through a multi-head self-attention mechanism followed by
+         * a position-wise feed-forward network, with optional layer normalization applied before or
+         * after each sub-layer depending on the specified normalization position strategy.
+         *
+         * @tparam t                The numeric type used in computations (e.g., float, double).
+         * @param ei                Input tensor (Collective<t>) representing embedded input tokens.
+         * @param mask              Attention mask to prevent attending to certain positions (e.g., padding).
+         * @param norm_position     Specifies whether to apply layer normalization before (Pre-LN) or
+         *                          after (Post-LN) the attention and feed-forward sub-layers.
+         *                          Options are:
+         *                            - PreAttentionAndFeedForwardNetwork (Pre-LN)
+         *                            - PostAttentionAndFeedForwardNetwork (Post-LN)
+         * @param is_training       Indicates whether the model is in training mode.
+         *                          Used to toggle dropout and gradient-related logic.
+         *
+         * @return Collective<t>    Output tensor after applying attention, residual connections,
+         *                          feed-forward network, and normalization.
+         *
+         * @throws ala_exception    If any internal computation fails or input constraints are violated.
+         */       
+        Collective<t> forward(Collective<t>& ei, Collective<t>& mask, ENCODER_LAYER_NORM_POSITION_TYPE norm_position = PreAttentionAndFeedForwardNetwork, bool is_training = true) throw (ala_exception)
         {
             /*
                 The output of MULTIHEADATTENTION::forward() is typically a transformed representation of the input sequence, where each token's representation has been updated based on attention over all tokens in the sequence. In a Transformer encoder, this output is usually processed further in the following steps:
@@ -203,6 +237,22 @@ class EncoderLayer
                  */                                           
                 output = attention.forward(ei, ei, ei, mask); // Attention output 
 
+                /*
+                    Valid only for Post-LN, where layer normalization is applied after the attention sublayer and the residual connection.
+
+                    Apply layer normalization after attention
+                    The output of the attention mechanism is passed through a layer normalization step.
+                    This helps stabilize the training process and improve convergence.
+                    The layer normalization is applied to the output of the attention mechanism.
+
+
+                    However, if you're introducing configurability for Pre-LN vs Post-LN (like you did for the feed-forward sublayer), you must wrap this in a conditional, just like you did before.
+                 */
+                if (norm_position == PostAttentionAndFeedForwardNetwork)
+                {
+                    output = /*norm1*/ attention_norm.forward(output); 
+                }
+
                 if (is_training)
                 {
 #ifdef STRESS_TEST_BACKWARD_PASS_IN_FORWARD_PASS
@@ -212,9 +262,9 @@ class EncoderLayer
 #endif                    
                 }
                                 
-                output = ei + output; // Residual connection around attention
+                /*output = ei + output;*/ // Residual connection around attention
                 
-                output = ffn.forward(output); // Feed-forward network output
+                        /*output = ffn.forward(output); // Feed-forward network output*/
 
                 if (is_training)
                 {
@@ -226,7 +276,7 @@ class EncoderLayer
                 }
 
                 // Apply layer normalization
-                output = /*norm1*/ attention_norm.forward(output); // Layer normalization after attention
+                        //output = /*norm1*/ attention_norm.forward(output); // Layer normalization after attention
                 /*
                     The encoder layer should only call backward() when running in training mode and,
                     during training, gradients will flow in the reverse order
@@ -260,6 +310,47 @@ class EncoderLayer
 #endif
                 }
 
+                Collective<t> residual; // Store the output for the residual connection
+                if (norm_position == PreAttentionAndFeedForwardNetwork)
+                {
+                    // Apply layer normalization before feed-forward network
+                        //residual = /*norm2*/ ffn_norm.forward(output); // Layer normalization before feed-forward network
+                        //output = output + residual; // Residual connection around FFN
+
+                    // Apply feed-forward network with residual connection
+                        //residual = ffn.forward(output); // Feed-forward network output
+                        //output = output + residual; // Residual connection around FFN
+                    // Apply layer normalization after feed-forward network*/
+
+                    // Pre-LN: Normalize before feed-forward network
+                    output = ffn_norm.forward(output);             // Layer norm before FFN
+                    /*Collective<t>*/ residual = ffn.forward(output);  // Apply FFN
+                    output = output + residual;                    // Add residual                    
+                }
+                else if (norm_position == PostAttentionAndFeedForwardNetwork)
+                {
+                    // Apply feed-forward network with residual connection
+                        //residual = ffn.forward(output); // Feed-forward network output
+                        //output = output + residual; // Residual connection around FFN
+                    // Apply layer normalization after feed-forward network
+                        //residual = /*norm2*/ ffn_norm.forward(output); // Layer normalization after feed-forward network
+                        //output = output + residual; // Residual connection around FFN
+
+                    residual = ffn.forward(output);  // Apply FFN
+                    output = output + residual;                    // Add residual
+                    output = ffn_norm.forward(output);             // Layer norm after residual (Post-LN)
+                }
+
+                /*
+                    Collective<t> residual = ffn.forward(output); // Feed-forward network output
+                    output = output + residual; // Residual connection around FFN
+                    output = ffn_norm.forward(output); // Apply layer normalization after feed-forward network
+                 */
+
+                    /*Collective<t> residual = ffn_norm.forward(output); // Feed-forward network output
+                    output = output + residual; // Residual connection around FFN*/
+                /*output = ffn.forward(output);*/ // Feed-forward network output 
+
                 // Apply feed-forward network with residual connection                
                 // ************************************************************************************ //
                 //  The following commented statement has been replaced with the two statements below.  //
@@ -272,11 +363,11 @@ class EncoderLayer
                 // The output of the feed-forward network is added to the input of the feed-forward network (output) to create a residual connection.
                 // This residual connection helps the model learn better by allowing gradients to flow more easily during backpropagation
                 // and helps mitigate the vanishing gradient problem.         
-                Collective<t> residual = ffn.forward(output); // Feed-forward network output
-                output = output + residual; // Residual connection around FFN
+                    /*Collective<t>*/ /*residual = ffn.forward(output); // Feed-forward network output
+                    output = output + residual; // Residual connection around FFN*/
                                 
                 // The output of the feed-forward network is then passed through layer normalization to stabilize the training process.                
-                output = /*norm2*/ ffn_norm.forward(output); // Apply layer normalization after feed-forward network
+                    //output = /*norm2*/ ffn_norm.forward(output); // Apply layer normalization after feed-forward network
 
                 /*
                     The encoder layer should only call backward() when running in training mode and,

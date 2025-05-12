@@ -8,6 +8,15 @@
 #ifndef NLP_ENCODER_DECODER_TRANSFORMER_MODEL_HEADER_HH
 #define NLP_ENCODER_DECODER_TRANSFORMER_MODEL_HEADER_HH
 
+/* 
+    The position of the layer normalization in the encoder layer.
+    - Pre: Layer normalization is applied before the attention and feed-forward network.
+    - Post: Layer normalization is applied after the attention and feed-forward network.
+    - In the original Transformer paper, layer normalization is applied after the attention and feed-forward networks (Post).
+    - In some implementations, it may be applied before (Pre) for different reasons, such as improving convergence or stability.
+ */
+typedef enum { PreAttentionAndFeedForwardNetwork, PostAttentionAndFeedForwardNetwork } ENCODER_LAYER_NORM_POSITION_TYPE;
+
 /*
     ADHOC_IMPLEMENTATION_OF_MASK(instance, mask)
 
