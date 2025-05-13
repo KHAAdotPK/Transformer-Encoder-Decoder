@@ -180,7 +180,7 @@ class EncoderLayer
                 5. Pass to the Decoder (If Implementing an Encoder-Decoder Model)
                    - If this is part of an encoder-decoder Transformer (e.g., for machine translation), the final encoder output will be used as input to the decoder.   
              */
-            Collective<t> output;
+            Collective<t> output, residual /*Store the output for the residual connection*/;
 
             try 
             {
@@ -235,8 +235,33 @@ class EncoderLayer
                     allowing the model to understand its role better in the sentence.
                     =========================================================================
                  */                                           
-                output = attention.forward(ei, ei, ei, mask); // Attention output 
+                    /*output = attention.forward(ei, ei, ei, mask);*/ // Attention output 
 
+                // For Pre-LN, you already have attention_norm applied before (not shown in the code snippet)
+                // Add the residual connection
+                /*output = ei + output;*/ // Residual connection around attention
+                /*
+                    The output of the attention mechanism is passed through a layer normalization step.
+                    This helps stabilize the training process and improve convergence.
+                    The layer normalization is applied to the output of the attention mechanism.
+                 */
+
+
+                if (norm_position == PreAttentionAndFeedForwardNetwork)
+                {
+                    // Pre-LN for attention
+                    residual = attention_norm.forward(ei);  // Normalize first
+                    residual = attention.forward(residual, residual, residual, mask);
+                    output = ei + residual;  // Add residual connection
+                }
+                else if (norm_position == PostAttentionAndFeedForwardNetwork)
+                {
+                    // Post-LN for attention
+                    residual = attention.forward(ei, ei, ei, mask);
+                    output = ei + residual;  // Add residual connection
+                    output = attention_norm.forward(output);  // Normalize after residual
+                }
+ 
                 /*
                     Valid only for Post-LN, where layer normalization is applied after the attention sublayer and the residual connection.
 
@@ -250,7 +275,7 @@ class EncoderLayer
                  */
                 if (norm_position == PostAttentionAndFeedForwardNetwork)
                 {
-                    output = /*norm1*/ attention_norm.forward(output); 
+                    /*output =*/ /*norm1*/ /*attention_norm.forward(output);*/ 
                 }
 
                 if (is_training)
