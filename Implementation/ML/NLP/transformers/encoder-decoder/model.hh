@@ -501,10 +501,22 @@ class Model
                                         std::cout<< std::endl;
                                     }
                                 }
-#endif                                
+#endif
                                 buildTragetSequence(tcp, tv, ts, v);
-#ifdef MAKE_THIS_MODEL_VERBOSE_FOR_POSITION_ENCODING                                
+#ifdef MAKE_THIS_MODEL_VERBOSE_FOR_TARGET_ENCODING                                
                                 std::cout<< "::: DEBUG DATA -: Model::buildTargetSequence() :- :::"  << std::endl;
+                                std::cout<< "ts(Target Sequence), Columns: " << ts.getShape().getNumberOfColumns() << ", Rows: " << ts.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
+                                for (int k = 0; k < ts.getShape().getN(); k++)
+                                {
+                                    std::cout<< ts[(k/ts.getShape().getNumberOfColumns())*ts.getShape().getNumberOfColumns() + (k%ts.getShape().getNumberOfColumns())] << " ";
+                                    if ((k + 1)%ts.getShape().getNumberOfColumns() == 0)
+                                    {
+                                        std::cout<< std::endl;
+                                    }
+                                }
+#endif
+
+#ifdef MAKE_THIS_MODEL_VERBOSE_FOR_POSITION_ENCODING                                
 #endif                                
                                 buildPositionEncoding(p, pe, dt, dm, is, mask, mntpl, sin_transformed_product, cos_transformed_product);
 #ifdef MAKE_THIS_MODEL_VERBOSE_FOR_POSITION_ENCODING                                
@@ -585,6 +597,8 @@ class Model
                                 }
                                 Encoder<t> encoder(ei.getShape().getNumberOfColumns(), DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER);                                 
                                 Collective<t> eo = encoder.forward(ei, mask);
+
+                                Decoder<t> decoder;
                                                                 
                                 /*                                    
                                     In the encoder input, rows (or lines) containing all zeros represent sequences with fewer tokens. 

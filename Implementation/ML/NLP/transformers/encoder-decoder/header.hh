@@ -207,6 +207,10 @@ typedef enum { PreAttentionAndFeedForwardNetwork, PostAttentionAndFeedForwardNet
 #include "./EncoderLayer.hh"
 #include "./encoder.hh"
 
+#include "./DecoderLayerList.hh"
+#include "./DecoderLayer.hh"
+#include "./decoder.hh"
+
 #include "./model.hh"
 
 #endif
