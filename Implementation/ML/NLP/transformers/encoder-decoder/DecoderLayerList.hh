@@ -9,9 +9,12 @@
 #define NLP_ENCODER_DECODER_TRANSFORMER_MODEL_DECODER_LAYER_LIST_HH
 
 template <typename t = double>
+class DecoderLayer; // Forward declaration of DecoderLayer
+
+template <typename t = double>
 struct DecoderLayerList
 {
-    //class DecoderLayer<t>* ptr; 
+    DecoderLayer<t>* ptr; 
 
     struct DecoderLayerList<t>* next;
     struct DecoderLayerList<t>* previous;

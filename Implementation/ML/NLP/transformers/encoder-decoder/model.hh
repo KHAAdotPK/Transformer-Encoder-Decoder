@@ -597,9 +597,7 @@ class Model
                                 }
                                 Encoder<t> encoder(ei.getShape().getNumberOfColumns(), DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER);                                 
                                 Collective<t> eo = encoder.forward(ei, mask);
-
-                                Decoder<t> decoder;
-                                                                
+                                                                                                
                                 /*                                    
                                     In the encoder input, rows (or lines) containing all zeros represent sequences with fewer tokens. 
                                     These rows typically arise due to padding when processing variable-length sequences.
@@ -661,6 +659,8 @@ class Model
                                     }
                                 }
                                 std::cout<< "*++++++++++++++++++++++++++++++++++++++*" << std::endl;
+
+                                Decoder<t> decoder(eo.getShape().getNumberOfColumns(), DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER);
 
                                 /* Reinitialize, input sequence and input sequence mask */
                                 /*for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < p.getShape().getN(); k++)
