@@ -59,7 +59,7 @@
 
     See EncoderLayer.hh for internal layer logic and attention mechanisms.    
  */
-template <typename t>
+template <typename t /*= double*/> // Uncomment the default assignment of type and at compile time: warning C4348: 'DecoderLayer': redefinition of default parameter: parameter 1
 class EncoderLayer;
 
 template <typename t = double>
