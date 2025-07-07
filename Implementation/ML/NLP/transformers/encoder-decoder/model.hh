@@ -108,7 +108,7 @@ class Model
                 {
                     /* Get the index of the token in the vocabulary. These indices originate at INDEX_ORIGINATE_AT_VALUE */
                     cc_tokenizer::string_character_traits<char>::size_type index = iv(icp.get_token_by_number(i + 1), icp.get_current_line_number(), i + 1, redundancy);
-
+                    
                     /* If this condition is false, we are no longer strictly using post-padding; instead, padding tokens may appear */
                     /* between valid tokens, leading to mixed padding. */
                     /* TODO: Investigate whether the following statement can ever evaluate to be false, because under that circumstances */
@@ -119,7 +119,7 @@ class Model
                         mask[i] = DEFAULT_VALID_WORD_VECTOR_MASK_VALUE;
             
                         /* we, Word Embedding */
-                        Collective<t> we = W1.slice((index - INDEX_ORIGINATES_AT_VALUE)*W1.getShape().getNumberOfColumns(), W1.getShape().getNumberOfColumns());
+                        Collective<t> we = W1.slice((index - /*INDEX_ORIGINATES_AT_VALUE*/ TOKENIZER_PARSER_TOKEN_NUMBER_ORIGINATES_AT_INDEX /*Indices in parser originate at 1 in parser*/)*W1.getShape().getNumberOfColumns(), W1.getShape().getNumberOfColumns());
                         for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < we.getShape().getN(); j++)
                         {
                             is[i*we.getShape().getN() + j] = we[j];
@@ -197,8 +197,8 @@ class Model
             {   /*
                     Generate position indices: range from POSITIONAL_ENCODING_START_VALUE(inclusive) to input sequence-length(exclusive), sequence-length is the number of tokens in a line.
                     Placement new with Copy Construction
-                 */
-                new (&p) Collective<t>{Numcy::arange<t, t>((t)POSITIONAL_ENCODING_START_VALUE, (t)mntpl + (t)POSITIONAL_ENCODING_START_VALUE, (t)1.0, DIMENSIONS{1, mntpl, NULL, NULL}), DIMENSIONS{1, mntpl, NULL, NULL}};
+                 */                
+                new (&p) Collective<t>{Numcy::arange<t, t>((t)POSITIONAL_ENCODING_START_VALUE, (t)mntpl + (t)POSITIONAL_ENCODING_START_VALUE, (t)1.0, DIMENSIONS{1, mntpl, NULL, NULL}), DIMENSIONS{1, mntpl, NULL, NULL}};                
                 /*for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < mntpl; i++)
                 {
                     p[i] = (t)POSITIONAL_ENCODING_START_VALUE + i;
@@ -659,9 +659,9 @@ class Model
                                     }
                                 }
                                 std::cout<< "*++++++++++++++++++++++++++++++++++++++*" << std::endl;
-
+                                
                                 Decoder<t> decoder(eo.getShape().getNumberOfColumns(), DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER);
-
+                                
                                 /* Reinitialize, input sequence and input sequence mask */
                                 /*for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < p.getShape().getN(); k++)
                                 {

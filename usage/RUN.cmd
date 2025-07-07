@@ -19,6 +19,7 @@ setlocal enabledelayedexpansion
 
 set build_verbose_option="CSVPreprocessorDefinitions=no"
 set build_verbose_option_for_position_encoding="BuildPositionEncodingVerbose=no"
+set build_verbose_option_for_target_encoding="BuildTargetEncodingVerbose=no"
 set temporary_stress_test_backward_in_forward_propogation="TemporaryStressTestBackwardInForwardPropogation=no"
 set verbose_option=
 set w1_filename_option="./data/weights/w1p.dat"
@@ -48,8 +49,10 @@ if "%1"=="verbose" (
     if "%2" neq "" ( 
         if "%2"=="verbose" (            
             set build_verbose_option="CSVPreprocessorDefinitions=yes"            
-        ) else if "%2"=="verbose_pe" (
+        ) else if "%2"=="verbose_pe" (	
             set build_verbose_option_for_position_encoding="BuildPositionEncodingVerbose=yes"
+	) else if "%2"=="verbose_te" (
+	    set build_verbose_option_for_target_encoding="BuildTargetEncodingVerbose=yes"							
         ) else if "%2"=="stress_test_backward_in_forward_pass" (
             set temporary_stress_test_backward_in_forward_propogation="TemporaryStressTestBackwardInForwardPropogation=yes"
         ) else (
@@ -71,7 +74,7 @@ goto :run
 @rem /p is short for /property
 @rem msbuild lib\libpng\libpng.csproj /p:Configuration=Debug /p:Platform=x64
 @rem msbuild project.xml /p:CSVPreprocessorDefinitions=yes
-@ msbuild project.xml /p:%build_verbose_option_for_position_encoding% /p:%build_verbose_option% /p:%temporary_stress_test_backward_in_forward_propogation%  
+@ msbuild project.xml /p:%build_verbose_option_for_position_encoding% /p:%build_verbose_option% /p:%temporary_stress_test_backward_in_forward_propogation%  /p:%build_verbose_option_for_target_encoding%
 goto :eof
 
 :run

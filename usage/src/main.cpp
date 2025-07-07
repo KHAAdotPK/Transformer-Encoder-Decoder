@@ -105,7 +105,7 @@ int main(int argc, char* argv[])
         std::cerr<< "main() -> " << e.what() << std::endl;                
         return 0;
     }
-
+    
     cc_tokenizer::String<char> file_name_w1 = DEFAULT_W1_FILE_NAME;
     if (arg_w1.argc)
     {
