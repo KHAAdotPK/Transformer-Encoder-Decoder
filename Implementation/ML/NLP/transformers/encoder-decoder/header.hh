@@ -3,12 +3,6 @@
     Q@khaa.pk
  */
 
-#include "./../../../../lib/argsv-cpp/lib/parser/parser.hh"
-#include "./../../../../lib/corpus/corpus.hh"
-#include "./../../../../lib/sundry/cooked_read_new.hh"
-#include "./../../../../lib/read_write_weights/header.hh"
-#include "./../../../../lib/Numcy/header.hh"
-
 #ifndef NLP_ENCODER_DECODER_TRANSFORMER_MODEL_HEADER_HH
 #define NLP_ENCODER_DECODER_TRANSFORMER_MODEL_HEADER_HH
 
@@ -27,10 +21,10 @@
     // - `encoder_mask`: A mask to prevent the decoder from attending to certain positions in the encoder output.
     // - `decoder_mask`: A mask to prevent the decoder from attending to certain positions in its own output.
  */
-#define DECODER_INPUT_PAD_VALUE 0
-#define DECODER_INPUT_BEGINNING_OF_SEQUENCE 1 
-#define DECODER_INPUT_END_OF_SEQUENCE 2
-#define DECODER_INPUT_UNK_VALUE 3
+#define DECODER_INPUT_PAD_VALUE 0 // <PAD>
+#define DECODER_INPUT_BEGINNING_OF_SEQUENCE 1 // <BOS> or <START>
+#define DECODER_INPUT_END_OF_SEQUENCE 2 // <EOS> or <END>
+#define DECODER_INPUT_UNKNOWN_VALUE 3 // <UNK>
 
 /*
     1. decoder_input (parameter 1):
@@ -337,6 +331,12 @@ typedef enum { PreAttentionAndFeedForwardNetwork, PostAttentionAndFeedForwardNet
 
 /* Hyperparameters end here */
 /* ------------------------ */
+
+#include "./../../../../lib/argsv-cpp/lib/parser/parser.hh"
+#include "./../../../../lib/corpus/corpus.hh"
+#include "./../../../../lib/sundry/cooked_read_new.hh"
+#include "./../../../../lib/read_write_weights/header.hh"
+#include "./../../../../lib/Numcy/header.hh"
 
 #include "./hyperparameters.hh"
 #include "./attention.hh"

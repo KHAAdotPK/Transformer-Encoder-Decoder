@@ -5,20 +5,11 @@
 
 #include <iostream>
 
-/*nclude "../../Implementation/lib/argsv-cpp/lib/parser/parser.hh"
-#include "../../Implementation/lib/corpus/corpus.hh"
-#include "../../Implementation/lib/sundry/cooked_read_new.hh"
-#include "../../Implementation/lib/read_write_weights/header.hh"*/
-
+/* Jut one include statement is all it takes to use the model */
 #include "../../Implementation/ML/NLP/transformers/encoder-decoder/header.hh"
 
 #ifndef TRANSFORMERS_CODER_ENCODER_MODULE_MAIN_HH
 #define TRANSFORMERS_CODER_ENCODER_MODULE_MAIN_HH
-
-/*#ifdef INDEX_ORIGINATES_AT_VALUE
-#undef INDEX_ORIGINATES_AT_VALUE
-#endif
-#define INDEX_ORIGINATES_AT_VALUE 4*/
 
 /*
     This allows you to conditionally include or exclude code based on whether macro is used as it is or prefixed/preceded by bang.

@@ -170,6 +170,7 @@ int main(int argc, char* argv[])
         dimensionsOfTheModelHyperparameter = DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER;
     }
 
+    /* Anok Yai */
     Model<double> model;
            
     try {
