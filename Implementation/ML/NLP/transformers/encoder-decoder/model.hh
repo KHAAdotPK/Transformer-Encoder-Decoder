@@ -326,40 +326,116 @@ class Model
             This is done using a softmax function, and the model is trained to minimize the cross-entropy loss between
             the predicted and actual token indices.   
          */ 
-        /*
-            @tcp, An object representing the target corpus, which provides token-related information.
-            @tv, A callable object that maps tokens to their corresponding vocabulary indices.
-            @ts, An output parameter of type `Collective<t>` that will store the final target sequence. 
-            @mntpl_target, Each target sequence is padded to ensure uniform length across variable-length sequences per line.
-                           The value of maximum number of tokens/sequences per line (mntpl_target) determines the size of all target sequences. 
-                           If an target input line has fewer tokens, padding is added to match the required length. 
-            @v, Display output, verbosly.
-
-            If your target sequence is [SOS, "hello", "world", EOS, PAD, PAD], the decoder receives [SOS, "hello", "world", EOS, PAD] as input (shifted right), 
-            and the masking ensures it can't attend to padding positions or future positions during training.
+        /**
+         * @brief Builds the target sequence and target sequence mask for transformer decoder training.
+         * 
+         * This function prepares two critical components for decoder training in an encoder-decoder transformer:
+         * 1. Target Sequence (ts): The tokenized target sequence with special tokens
+         * 2. Target Sequence Mask (tsm): A causal attention mask that prevents future token access
+         * 
+         * TARGET SEQUENCE (ts):
+         * - Constructs a sequence starting with DECODER_INPUT_BEGINNING_OF_SEQUENCE (<START>)
+         * - Maps each token from the corpus to its vocabulary index
+         * - Handles unknown tokens by assigning DECODER_INPUT_UNKNOWN_VALUE (<UNK>)
+         * - Appends DECODER_INPUT_END_OF_SEQUENCE (<END>) after all tokens
+         * - Remaining positions are implicitly padded with DECODER_INPUT_PAD_VALUE (<PAD>)
+         * 
+         * TARGET SEQUENCE MASK (tsm):
+         * - Creates a lower triangular matrix (causal mask) for decoder self-attention
+         * - Each position can only attend to previous positions (including itself)
+         * - Masks out padding tokens (sets to 0) to prevent attention to irrelevant positions
+         * - Masks out unknown tokens (sets to 0) to reduce noise during training
+         * - Allows attention to <START>, <END>, and valid vocabulary tokens (sets to 1)
+         * 
+         * Example:
+         * Input tokens: ["hello", "world"]
+         * Target sequence: [<START>, "hello", "world", <END>, <PAD>, <PAD>, ...]
+         * Target mask: Lower triangular matrix with 1s for valid tokens, 0s for padding/unknown
+         * 
+         * @param tcp Tokenizer parser containing the target corpus tokens
+         * @param tv Trget vocabulary callable that maps tokens to their corresponding indices
+         * @param ts Output parameter storing the constructed target sequence
+         * @param tsm Output parameter storing the target sequence attention mask (causal + padding mask)
+         * @param mntpl_target Maximum number of tokens per line for padding (determines sequence length)
+         * @param verbose Flag to enable detailed output logging
+         * 
+         * @throws ala_exception If tokenization or mask construction fails
+         * 
+         * @note 1: This function implements teacher forcing preparation where the decoder receives
+         *          the ground truth sequence as input during training, with masking ensuring
+         *          autoregressive behavior (no future token access).
+         * @note 2: If your target sequence is [SOS, "hello", "world", EOS, PAD, PAD], the decoder receives [SOS, "hello", "world", EOS, PAD] as input (shifted right), 
+         *          and the masking ensures it can't attend to padding positions or future positions during training. 
          */        
-        void buildTragetSequence(cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>& tcp, CORPUS& tv, Collective<t>& ts,  cc_tokenizer::string_character_traits<char>::size_type mntpl_target = 0, bool verbose = false) throw (ala_exception)
-        {            
-            ts[0] = DECODER_INPUT_BEGINNING_OF_SEQUENCE;
-
-            for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < tcp.get_total_number_of_tokens(); i++)
+        void buildTragetSequence(cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>& tcp, CORPUS& tv, Collective<t>& ts, Collective<t>& tsm, cc_tokenizer::string_character_traits<char>::size_type mntpl_target = 0, bool verbose = false) throw (ala_exception)
+        {               
+            try 
             {
-                /* Get the index of the token in the vocabulary. These indices originate at INDEX_ORIGINATE_AT_VALUE */
-                cc_tokenizer::string_character_traits<char>::size_type index = tv(tcp.get_token_by_number(i + 1));
+                ts[0] = DECODER_INPUT_BEGINNING_OF_SEQUENCE;
 
-                if (index != INDEX_NOT_FOUND_AT_VALUE)
-                {   
-
-                    ts[i + 1] = tv(tcp.get_token_by_number(i + 1));
-                }
-                else
+                for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < tcp.get_total_number_of_tokens(); i++)
                 {
+                    /* Get the index of the token in the vocabulary. These indices originate at INDEX_ORIGINATE_AT_VALUE */
+                    cc_tokenizer::string_character_traits<char>::size_type index = tv(tcp.get_token_by_number(i + 1));
 
-                    ts[i + 1] = DECODER_INPUT_UNKNOWN_VALUE;              
+                    if (index != INDEX_NOT_FOUND_AT_VALUE)
+                    {   
+
+                        ts[i + 1] = tv(tcp.get_token_by_number(i + 1));
+                    }
+                    else
+                    {
+
+                        ts[i + 1] = DECODER_INPUT_UNKNOWN_VALUE;              
+                    }
                 }
             }
+            catch (ala_exception &e)
+            {
+                throw ala_exception(cc_tokenizer::String<char>("Model::buildTargetSequence() -> ") + cc_tokenizer::String<char>(e.what())); 
+            }
 
-            ts[tcp.get_total_number_of_tokens() + 1] = DECODER_INPUT_END_OF_SEQUENCE;                     
+            ts[tcp.get_total_number_of_tokens() + 1] = DECODER_INPUT_END_OF_SEQUENCE; 
+            
+            // Build decoder mask (target mask). Decoder self-attention - each position can only attend to previous positions (including itself)
+            /*
+                The mask is doing two things simultaneously:
+                1. Causal masking: Lower triangular pattern prevents looking at future tokens (preventing future access)
+                2. Padding masking: Stops at the actual sequence length (tcp.get_total_number_of_tokens() + 2 for <START> and <END>) (preventing attention to irrelevant tokens)
+             */
+            try
+            {
+                for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < tsm.getShape().getDimensionsOfArray().getNumberOfInnerArrays(); i++)                
+                {
+                    for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j <= i; j++)
+                    {
+                        if (ts[j] == DECODER_INPUT_BEGINNING_OF_SEQUENCE)
+                        {
+                            tsm[i*tsm.getShape().getNumberOfColumns() + j] = 1;
+                        }
+                        else if (ts[j] == DECODER_INPUT_END_OF_SEQUENCE)
+                        {
+                            tsm[i*tsm.getShape().getNumberOfColumns() + j] = 1;
+                        }
+                        else if (ts[j] == DECODER_INPUT_UNKNOWN_VALUE)
+                        {
+                            tsm[i*tsm.getShape().getNumberOfColumns() + j] = 0;
+                        }
+                        else if (ts[j] == DECODER_INPUT_PAD_VALUE)
+                        {
+                            tsm[i*tsm.getShape().getNumberOfColumns() + j] = 0;
+                        }
+                        else 
+                        {
+                            tsm[i*tsm.getShape().getNumberOfColumns() + j] = 1;
+                        }
+                    }
+                }
+            }
+            catch (ala_exception& e)
+            {
+                throw ala_exception(cc_tokenizer::String<char>("Model::buildTargetSequence() -> ") + cc_tokenizer::String<char>(e.what())); 
+            }            
         }
     
         /*
@@ -370,6 +446,7 @@ class Model
             @tcp, target csv parser
             @is, input sequence
             @ts, target sequence
+            @tsm, target sequence mask
             @p, position
             @pe, position encoding
             @dm, dimensions of the model(d_model)
@@ -380,7 +457,7 @@ class Model
             @batch, batch type 
             @v, be verbose when true                                                                                                                                                           
          */
-        void startTraining(cc_tokenizer::string_character_traits<char>::size_type es, CORPUS& iv, CORPUS& tv, cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>& icp, cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>& tcp, Collective<t>& is, Collective<t>& ts, Collective<t>& p, Collective<t>& pe, cc_tokenizer::string_character_traits<char>::size_type dm, Collective<t>& dt, Collective<t>& ei, Collective<t>& di, Collective<t>& W1, BatchType batch = SINGLE_LINE, bool v = false) throw (ala_exception)
+        void startTraining(cc_tokenizer::string_character_traits<char>::size_type es, CORPUS& iv, CORPUS& tv, cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>& icp, cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>& tcp, Collective<t>& is, Collective<t>& ts, Collective<t>& tsm, Collective<t>& p, Collective<t>& pe, cc_tokenizer::string_character_traits<char>::size_type dm, Collective<t>& dt, Collective<t>& ei, Collective<t>& di, Collective<t>& W1, BatchType batch = SINGLE_LINE, bool v = false) throw (ala_exception)
         {
             switch (batch)
             {
@@ -436,10 +513,14 @@ class Model
                         memset(ptr, 0, sizeof(t)*mntpl_input*dm);
                         pe = Collective<t>{ptr, DIMENSIONS{dm, mntpl_input, NULL, NULL}};
 
+                        /* Target Sequence and Target Sequence Mask */
                         /* 2 is for two more memory locations to store <BOS> , <EOS> */
                         ptr = cc_tokenizer::allocator<t>().allocate(mntpl_target + 2);
                         memset(ptr, DECODER_INPUT_PAD_VALUE, sizeof(t)*mntpl_target + 2);
                         ts = Collective<t>{ptr, DIMENSIONS{mntpl_target + 2, 1, NULL, NULL}};
+                        ptr = cc_tokenizer::allocator<t>().allocate((mntpl_target + 2)*(mntpl_target + 2));
+                        memset(ptr, 0, sizeof(t)*((mntpl_target + 2)*(mntpl_target + 2)));
+                        tsm = Collective<t>{ptr, DIMENSIONS{mntpl_target + 2, mntpl_target + 2, NULL, NULL}};
                         
                         for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < es; i++)
                         {
@@ -482,7 +563,7 @@ class Model
                                     }
                                 }
 #endif
-                                buildTragetSequence(tcp, tv, ts, mntpl_target, v);
+                                buildTragetSequence(tcp, tv, ts, tsm, mntpl_target, v);
 #ifdef MAKE_THIS_MODEL_VERBOSE_FOR_TARGET_ENCODING                                
                                 std::cout<< "::: DEBUG DATA -: Model::buildTargetSequence() :- :::"  << std::endl;
                                 std::cout<< "ts(Target Sequence), Columns: " << ts.getShape().getNumberOfColumns() << ", Rows: " << ts.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
@@ -500,6 +581,17 @@ class Model
                                         std::cout<< std::endl;
                                     }
                                 }
+                                std::cout<< "::: DEBUG DATA -: Model::buildTargetSequence() :- :::"  << std::endl;
+                                std::cout<< "tsm(Target Sequence Mask), Columns: " << tsm.getShape().getNumberOfColumns() << ", Rows: " << tsm.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
+                                for (int k = 0; k < tsm.getShape().getN(); k++)
+                                {
+                                    std::cout<< tsm[(k/tsm.getShape().getNumberOfColumns())*tsm.getShape().getNumberOfColumns() + (k%tsm.getShape().getNumberOfColumns())] << " ";
+                                    if ((k + 1)%tsm.getShape().getNumberOfColumns() == 0)
+                                    {
+                                        std::cout<< std::endl;
+                                    }
+                                }
+
 #endif
 
 #ifdef MAKE_THIS_MODEL_VERBOSE_FOR_POSITION_ENCODING                                
@@ -669,10 +761,13 @@ class Model
                                 {
                                     pe[k] = 0;
                                 }
-
                                 for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < ts.getShape().getN(); k++)
                                 {
                                     ts[k] = DECODER_INPUT_PAD_VALUE;
+                                }
+                                for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < tsm.getShape().getN(); k++)
+                                {
+                                    tsm[k] = 0;
                                 }
                             }
                         }
