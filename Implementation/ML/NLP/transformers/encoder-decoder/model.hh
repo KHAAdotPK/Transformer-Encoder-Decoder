@@ -540,9 +540,9 @@ class Model
                                 }
 
                                 buildInputSequence(icp, iv, is, mask, W1, !ALLOW_REDUNDANCY);
-#ifdef MAKE_THIS_MODEL_VERBOSE_FOR_POSITION_ENCODING                                
-                                std::cout<< "Number of tokens in this line: " << icp.get_total_number_of_tokens() << std::endl; 
+#ifdef MAKE_THIS_MODEL_VERBOSE_FOR_INPUT_SEQUENCE                                
                                 std::cout<< "::: DEBUG DATA -: Model::buildInputSequence() :- :::"  << std::endl;
+                                std::cout<< "Number of tokens in this line: " << icp.get_total_number_of_tokens() << std::endl; 
                                 std::cout<< "is(Input Sequence), Columns: " << is.getShape().getNumberOfColumns() << ", Rows: " << is.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;                                
                                 for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < is.getShape().getN(); k++)
                                 {
@@ -662,7 +662,7 @@ class Model
                                 }                                
 #endif                          
                                 ei = Numcy::concatenate(pe, is); 
-                                                                
+#ifdef MAKE_THIS_MODEL_VERBOSE_FOR_ENCODER_INPUT                                                                
                                 std::cout<< "::: DEBUG DATA -: Encoder Input(ei) :- :::"  << std::endl;
                                 std::cout<< "Columns: " << ei.getShape().getNumberOfColumns() << ", Rows: " << ei.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
                                 for (int k = 0; k < ei.getShape().getN(); k++)
@@ -673,6 +673,7 @@ class Model
                                         std::cout<< std::endl;
                                     }
                                 }
+#endif                                
                                 Encoder<t> encoder(ei.getShape().getNumberOfColumns(), DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER);                                 
                                 Collective<t> eo = encoder.forward(ei, mask);
                                                                                                 
@@ -724,7 +725,7 @@ class Model
                                         - The following statement explicitly enforces this constraint by applying a masking operation
                                  */
                                 ADHOC_IMPLEMENTATION_OF_MASK_QUERY(eo, mask, true);
-
+#ifdef MAKE_THIS_MODEL_VERBOSE_FOR_ENCODER_OUTPUT
                                 std::cout<< "::: DEBUG DATA -: Encoder Output(eo) :- :::"  << std::endl;
                                 std::cout<< "Columns: " << eo.getShape().getNumberOfColumns() << ", Rows: " << eo.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
                                 /*std::cout<< "Columns: " << mask.getShape().getNumberOfColumns() << ", Rows: " << mask.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;*/
@@ -737,7 +738,7 @@ class Model
                                     }
                                 }
                                 std::cout<< "*++++++++++++++++++++++++++++++++++++++*" << std::endl;
-                                
+#endif                                                                
                                 Decoder<t> decoder(eo.getShape().getNumberOfColumns(), DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER);
                                 
                                 /* Reinitialize, input sequence and input sequence mask */
