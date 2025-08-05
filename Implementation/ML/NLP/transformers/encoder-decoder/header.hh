@@ -329,6 +329,23 @@ typedef enum { PreAttentionAndFeedForwardNetwork, PostAttentionAndFeedForwardNet
  */
 #define DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER 0x04
 
+/*
+    Position encoding typically starts from 0 (as seen in transformers and many NLP models),
+    using 0.1 instead might lead to subtle differences in how positions are represented later in the pipeline.
+    
+    This is intentional, make sure it aligns with overall mathematical formulation and be ready to change it back to 0.0f.
+
+    The issue is that some sequences in the batch will be shorter than the maximum sequence length, 
+    After generating positions, we use a masking mechanism to identify padded positions and manually set them to 0.
+    Start at 1 instead of 0, this ensures that valid tokens always get a nonzero position value (avoiding ambiguity with padding).
+
+    Using post-padding, the issue is that some sequences in the batch will be shorter than the maximum sequence length, and you want to make sure:
+    - Padding positions get zeroed out so they don’t contribute to the model.
+    - Valid positions start from a nonzero value (which is why you started at 0.1 instead of 0.0).
+    you're ensuring that no valid token position is assigned 0, which could otherwise be confused with padding.
+ */
+#define POSITIONAL_ENCODING_START_VALUE 1.0f
+
 /* Hyperparameters end here */
 /* ------------------------ */
 
