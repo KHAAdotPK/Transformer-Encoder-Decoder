@@ -145,34 +145,71 @@ class Model
             }
         }
 
-        /*
-            * @param pe An output parameter of type `Collective<t>` that stores the final position encodings.
-         */
         /**
-         * @brief Constructs position encoding for a batch of input sequences.
+         * @brief Constructs position encoding for a batch of input sequences using sinusoidal encoding.
          *
-         * This macro generates position encoding vectors that will be used in 
-         * transformer-based models to retain positional information.
+         * This function generates position encoding vectors that will be used in 
+         * transformer-based models to retain positional information. It implements 
+         * the standard sinusoidal position encoding scheme where:
+         * - Even dimensions use sine function: PE(pos, 2i) = sin(pos / 10000^(2i/d_model))
+         * - Odd dimensions use cosine function: PE(pos, 2i+1) = cos(pos / 10000^(2i/d_model))
+         *
+         * The function handles padding tokens by applying a mask to ensure they receive 
+         * zero position encodings, maintaining the semantic meaning that padding tokens 
+         * do not contribute to positional understanding.
          *
          * @param p  An output parameter of type `Collective<t>` representing position indices.
+         *           Shape: [1 x mntpl_input]. Contains sequential position values from 
+         *           POSITIONAL_ENCODING_START_VALUE to sequence length, masked for padding.
+         * 
          * @param pe An output parameter of type `Collective<t>` that stores the final position encodings.
-         * @param dt Division Term, an output parameter of type `Collective<t>` representing the scaling term.
-         * @param dm The model's embedding dimension.
-         * @param is An input tensor representing the input sequence batch.
-         * @param mask a mask that differentiates real tokens from padding tokens. 
-         *        Padding tokens should not receive valid position encodings because they do not contribute to the model’s 
-         *        understanding of sequence structure(padding tokens are added to make all input sequences 
-         *        uniform in length).  
-         * @param mntpl_input Each input sequence is padded to ensure uniform length across variable-length sequences per line.
-                  The value of maximum number of tokens/sequences per line (mntpl_input) determines the size of all input sequences. 
-         *        If an input line has fewer tokens, padding is added to match the required length. 
+         *           Shape: [sequence_length x dm]. Contains alternating sine/cosine values 
+         *           for each position and embedding dimension.
+         * 
+         * @param dt An output parameter of type `Collective<t>` representing the division/scaling term.
+         *           Shape: [sequence_length x dm]. Contains the exponential scaling factors 
+         *           computed as exp(-log(10000) * 2*dim_pair / dm) for frequency modulation.
+         * 
+         * @param dm The model's embedding dimension. Must be even for proper sine/cosine pairing.
+         * 
+         * @param is An input tensor representing the input sequence batch (currently unused in implementation).
+         * 
+         * @param mask A mask tensor of shape [1 x mntpl_input] that differentiates real tokens (1) 
+         *        from padding tokens (0). Padding tokens should not receive valid position 
+         *        encodings because they do not contribute to the model's understanding of 
+         *        sequence structure. Padding tokens are added to make all input sequences 
+         *        uniform in length.
+         * 
+         * @param mntpl_input Maximum number of tokens per line (sequence length). Each input 
+         *        sequence is padded to ensure uniform length across variable-length sequences. 
+         *        If an input line has fewer tokens, padding is added to match this required length.
+         * 
+         * @param sin_transformed_product An output parameter storing sine-transformed position*frequency products.
+         *        Used as intermediate storage for sine calculations before final assignment.
+         * 
+         * @param cos_transformed_product An output parameter storing cosine-transformed position*frequency products.
+         *        Used as intermediate storage for cosine calculations before final assignment.
          *
-         * Functionality:
-         * - Computes position indices (`p`) using `Numcy::arange()`, representing sequence positions.
-         * - Computes the scaling term (`dt`) using an exponential function with a predefined scaling factor.
-         * - Initializes the position encoding tensor (`pe`) with zeros.
-         * - Applies sine functions to compute position encoding values.
-         * - Fills even and odd indices separately using helper macros.
+         * @throws ala_exception Thrown on memory allocation errors, length errors, or other exceptions
+         *         during position encoding computation.
+         *
+         * Algorithm Steps:
+         * 1. Generate position indices using arange() from start value to sequence length
+         * 2. Apply mask to zero out positions corresponding to padding tokens
+         * 3. Compute scaling factors (dt) using exponential decay based on dimension pairs
+         * 4. Calculate position*frequency products for all positions and dimensions
+         * 5. Apply sine transformation for even indices, cosine for odd indices
+         * 6. Fill final position encoding matrix with masked sine/cosine values
+         *
+         * Mathematical Foundation:
+         * - Frequency decreases exponentially with dimension: freq = 1/10000^(2i/d_model)
+         * - Dimension pairing: dimensions (2i, 2i+1) share the same base frequency
+         * - Masking ensures padding positions contribute zero to attention computations
+         *
+         * Memory Layout Notes:
+         * - All matrices use row-major ordering for element access
+         * - Position encodings are computed element-wise without broadcasting
+         * - Final PE matrix has alternating sine/cosine pattern across dimensions
          */
         /*
             m    n
