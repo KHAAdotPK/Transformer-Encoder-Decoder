@@ -230,18 +230,30 @@ class Model
                 {
                     /*t value = (t)POSITIONAL_ENCODING_START_VALUE;*/
 
-                    for (t j = 0; j < dm; j++)
+                    for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < dm; j++)
                     {                        
-                        /* 1.0 / std::pow(10000.0, value / (t)dm); */
+                        /* 
+                            // Standard positional encoding:
+                            // 1.0 / std::pow(10000.0, value / (t)dm); 
+                         */
 
-                        // Standard positional encoding: 1 / 10000^(2*(j/2)/d_model)
+                        t dimension_pair = (t)0;
+
                         // For even j: use j/2, for odd j: use (j-1)/2 
-                        // This ensures pairs of dimensions have the same base frequency
-                        t dimension_pair = (t)(j / 2);  // Integer division
+                        // This ensures pairs of dimensions have the same base frequency 
+                        if ( (j % 2) == 0 ) // Even
+                        {
+                            dimension_pair = (t)(j / 2); // Integer division
+                        } 
+                        else // Odd 
+                        {
+                            dimension_pair = (t)((j - 1) / 2); // Integer division
+                        }
+                        
                         t exponent = -std::log(10000.0) * (2.0 * dimension_pair) / (t)dm;
                         dt[i * dt.getShape().getNumberOfColumns() + j] = std::exp(exponent);
 
-                        /*t exponent = -std::log(10000.0) * (2.0 * i) / (t)dm;
+                        /*t exponent = -std::log(10000.0) * (2.0 * j) / (t)dm;
                         dt[i*dt.getShape().getNumberOfColumns() + j] = std::exp(exponent);*/
 
                         /*dt[i*dt.getShape().getNumberOfColumns() + j] = std::exp(value * (t)(SCALING_FACTOR(SCALING_FACTOR_CONSTANT, dm)));*/
