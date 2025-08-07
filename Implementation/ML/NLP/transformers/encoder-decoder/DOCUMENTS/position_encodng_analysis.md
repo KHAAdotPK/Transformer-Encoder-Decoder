@@ -14,7 +14,7 @@ Without position encoding, the transformer would see the words "cat chased mouse
 
 ## The Challenge: Variable-Length Sentences
 
-Real sentences have different lengths, but our model needs fixed-size inputs(`finxed number of words/token in each sentence of a training corpus`). In our corpus, every sentence has a **maximum of say 3 words**. But some sentences are shorter, so we need to add padding to make them all the same length(`3 words/tokens per sentence`).
+Real sentences have different lengths, but our model needs fixed-size inputs(`fixed number of words/token in each sentence of a training corpus`). In our corpus, every sentence has a **maximum of say 3 words**. But some sentences are shorter, so we need to add padding to make them all the same length(`3 words/tokens per sentence`).
 
 For example:
 - A sentence like "Hello world" (2 words) becomes "Hello world [PAD]" (3 positions)
