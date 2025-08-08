@@ -128,3 +128,209 @@ This foundation enables the transformer to process language with full awareness 
 ---
 
 *Document generated from comprehensive analysis of position encoding implementation which is part of encoder input transformation pipeline.*
+
+## Build System Architecture
+
+The implementation features a sophisticated conditional compilation system:
+
+### Debug Flag
+- `verbose_pe`: Position Encoding verbose debugging
+
+### Build Configuration
+```batch
+msbuild project.xml /p:BuildPositionEncodingVerbose=yes
+
+usage/RUN.cmd build verbose_pe
+```
+
+```C++
+/**
+ * @brief Constructs position encoding for a batch of input sequences using sinusoidal encoding.
+ *
+ * This function generates position encoding vectors that will be used in 
+ * transformer-based models to retain positional information. It implements 
+ * the standard sinusoidal position encoding scheme where:
+ * - Even dimensions use sine function: PE(pos, 2i) = sin(pos / 10000^(2i/d_model))
+ * - Odd dimensions use cosine function: PE(pos, 2i+1) = cos(pos / 10000^(2i/d_model))
+ *
+ * The function handles padding tokens by applying a mask to ensure they receive 
+ * zero position encodings, maintaining the semantic meaning that padding tokens 
+ * do not contribute to positional understanding.
+ *
+ * @param p  An output parameter of type `Collective<t>` representing position indices.
+ *           Shape: [1 x mntpl_input]. Contains sequential position values from 
+ *           POSITIONAL_ENCODING_START_VALUE to sequence length, masked for padding.
+ * 
+ * @param pe An output parameter of type `Collective<t>` that stores the final position encodings.
+ *           Shape: [sequence_length x dm]. Contains alternating sine/cosine values 
+ *           for each position and embedding dimension.
+ * 
+ * @param dt An output parameter of type `Collective<t>` representing the division/scaling term.
+ *           Shape: [sequence_length x dm]. Contains the exponential scaling factors 
+ *           computed as exp(-log(10000) * 2*dim_pair / dm) for frequency modulation.
+ * 
+ * @param dm The model's embedding dimension. Must be even for proper sine/cosine pairing.
+ * 
+ * @param is An input tensor representing the input sequence batch (currently unused in implementation).
+ *  
+ * @param mask A mask tensor of shape [1 x mntpl_input] that differentiates real tokens (1) 
+ *        from padding tokens (0). Padding tokens should not receive valid position 
+ *        encodings because they do not contribute to the model's understanding of 
+ *        sequence structure. Padding tokens are added to make all input sequences 
+ *        uniform in length.
+ * 
+ * @param mntpl_input Maximum number of tokens per line (sequence length). Each input 
+ *        sequence is padded to ensure uniform length across variable-length sequences. 
+ *        If an input line has fewer tokens, padding is added to match this required length.
+ * 
+ * @param sin_transformed_product An output parameter storing sine-transformed position*frequency products.
+ *        Used as intermediate storage for sine calculations before final assignment.
+ * 
+ * @param cos_transformed_product An output parameter storing cosine-transformed position*frequency products.
+ *        Used as intermediate storage for cosine calculations before final assignment.
+ *
+ * @throws ala_exception Thrown on memory allocation errors, length errors, or other exceptions
+ *         during position encoding computation.
+ *
+ * Algorithm Steps:
+ * 1. Generate position indices using arange() from start value to sequence length
+ * 2. Apply mask to zero out positions corresponding to padding tokens
+ * 3. Compute scaling factors (dt) using exponential decay based on dimension pairs
+ * 4. Calculate position*frequency products for all positions and dimensions
+ * 5. Apply sine transformation for even indices, cosine for odd indices
+ * 6. Fill final position encoding matrix with masked sine/cosine values
+ *
+ * Mathematical Foundation:
+ * - Frequency decreases exponentially with dimension: freq = 1/10000^(2i/d_model)
+ * - Dimension pairing: dimensions (2i, 2i+1) share the same base frequency
+ * - Masking ensures padding positions contribute zero to attention computations
+ *
+ * Memory Layout Notes:
+ * - All matrices use row-major ordering for element access
+ * - Position encodings are computed element-wise without broadcasting
+ * - Final PE matrix has alternating sine/cosine pattern across dimensions
+ */
+/*
+    m    n
+    p = mntpl_input x 1
+    mask = 1 x mntpl_input
+    n    p           
+    m x p                 
+    p * mask   
+ */
+void buildPositionEncoding(Collective<t>& p, Collective<t>& pe, Collective<t>& dt, cc_tokenizer::string_character_traits<char>::size_type dm, Collective<t>& is, Collective<t>& mask, cc_tokenizer::string_character_traits<char>::size_type mntpl_input, Collective<t>& sin_transformed_product, Collective<t>& cos_transformed_product) throw (ala_exception)
+{            
+    try
+    {   /*
+            Generate position indices: range from POSITIONAL_ENCODING_START_VALUE(inclusive) to input sequence-length(exclusive), sequence-length is the number of tokens in a line.        
+         */
+        p = Collective<t>{Numcy::arange<t, t>((t)POSITIONAL_ENCODING_START_VALUE, (t)mntpl_input + (t)(t)POSITIONAL_ENCODING_START_VALUE, (t)1.0, DIMENSIONS{1, mntpl_input, NULL, NULL}), DIMENSIONS{1, mntpl_input, NULL, NULL}};                
+ 
+        /*
+         * Perform element-wise multiplication between the position matrix `p` and the mask matrix `mask`.
+         *
+         * Why this is done:
+         * - The position matrix `p` contains positional encodings for each token in the sequence.
+         * - The mask matrix `mask` indicates which tokens are valid (1) and which are padding (0).
+         * - By multiplying `p` and `mask` element-wise, we ensure that positional encodings for invalid tokens
+         *   (padding) are zeroed out, while valid tokens retain their positional values.
+         *
+         * How this works:
+         * - Both `p` and `mask` have the same number of elements, but they may have different shapes.
+         * - The `[]` operator is overloaded to access elements linearly, regardless of the shapes of `p` and `mask`.
+         * - The loop iterates over each element of `p` and `mask`, multiplying them together and storing the result in `p`.
+         *
+         * Example:
+         * - If `p` is [1, 2, 3] and `mask` is [1, 1, 0], the result will be [1, 2, 0].
+         * - This ensures that the positional encoding for the third token (padding) is zeroed out.
+         *
+         * Note:
+         * - This is NOT broadcasting. Broadcasting would automatically expand the smaller array to match the shape
+         *   of the larger array, but here we are explicitly iterating over the elements and performing the
+         *   multiplication manually.
+         */                
+         for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < mntpl_input; i++)
+         {             
+            p[i] = p[i] * mask[i];                 
+         }                
+        /*
+            // n in p must equal to m in mask
+            // p mow becomes matrix of colmns from mask and rows from p
+         */
+        p = p * mask;
+                                
+        //p = Numcy::transpose<t>(p);
+
+        for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < dt.getShape().getDimensionsOfArray().getNumberOfInnerArrays(); i++)
+        {
+            /*t value = (t)POSITIONAL_ENCODING_START_VALUE;*/
+
+            for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < dm; j++)
+            {                        
+                /* 
+                    // Standard positional encoding:
+                    // 1.0 / std::pow(10000.0, value / (t)dm); 
+                */
+
+                t dimension_pair = (t)0;
+
+                // For even j: use j/2, for odd j: use (j-1)/2 
+                // This ensures pairs of dimensions have the same base frequency 
+                if ( (j % 2) == 0 ) // Even
+                {
+                    dimension_pair = (t)(j / 2); // Integer division
+                } 
+                else // Odd 
+                {
+                    dimension_pair = (t)((j - 1) / 2); // Integer division
+                }
+                        
+                t exponent = -std::log(10000.0) * (2.0 * dimension_pair) / (t)dm;
+                dt[i * dt.getShape().getNumberOfColumns() + j] = std::exp(exponent);
+
+                /*t exponent = -std::log(10000.0) * (2.0 * j) / (t)dm;
+                dt[i*dt.getShape().getNumberOfColumns() + j] = std::exp(exponent);*/
+
+                /*dt[i*dt.getShape().getNumberOfColumns() + j] = std::exp(value * (t)(SCALING_FACTOR(SCALING_FACTOR_CONSTANT, dm)));*/
+ 
+                /*value = value + (t)(2*i);  // Increments by 2*/
+            }              
+        }                
+ 
+        Collective<t> p_to_dt = p * dt;
+
+        for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < p_to_dt.getShape().getN(); i++)
+        {
+            sin_transformed_product[i] = std::sin(p_to_dt[i]);
+            cos_transformed_product[i] = std::cos(p_to_dt[i]);
+        }                          
+#ifdef MAKE_THIS_MODEL_VERBOSE_FOR_POSITION_ENCODING                
+        /*std::cout<< "sin_transformed_product, Columns: " << sin_transformed_product.getShape().getNumberOfColumns() << ", Rows: " << sin_transformed_product.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;*/
+#endif                                
+        /* Fill even and odd indices separately */
+        for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < pe.getShape().getN(); i+=2)
+        {                       
+            pe[i] = sin_transformed_product[i] * mask[i/pe.getShape().getNumberOfColumns()];
+        }
+        for (cc_tokenizer::string_character_traits<char>::size_type i = 1; i < pe.getShape().getN(); i+=2)
+        {
+            pe[i] = cos_transformed_product[i] * mask[i/pe.getShape().getNumberOfColumns()];
+        }
+
+        // 64 rows, 3 columns                         3 rows and 1 column   
+        //Numcy::transpose(sin_transformed_product) * Numcy::transpose(mask);
+    }
+    catch (std::bad_alloc& e)
+    {
+        throw ala_exception(cc_tokenizer::String<char>("Model::buildPositionEncoding() Error: ") + cc_tokenizer::String<char>(e.what()));
+    }
+    catch (std::length_error& e)
+    {
+        throw ala_exception(cc_tokenizer::String<char>("Model::buildPositionEncoding() Error: ") + cc_tokenizer::String<char>(e.what()));
+    }            
+    catch (ala_exception& e)
+    {
+        throw ala_exception(cc_tokenizer::String<char>("Model::buildPositionEncoding() -> ") + cc_tokenizer::String<char>(e.what()));
+    }
+}
+```
