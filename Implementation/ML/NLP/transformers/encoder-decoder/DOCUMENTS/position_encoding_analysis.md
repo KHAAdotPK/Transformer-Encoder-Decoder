@@ -1,5 +1,9 @@
 # Transformer Position Encoding Analysis
 
+#### Written by, Sohail Qayum Malik
+
+---
+
 ## Project Overview
 
 This series of documents provide a comprehensive analysis of a custom C++ transformer implementation, focusing on the complete pipeline from input sequence processing through encoder input/output preparation, decoder input/output preparation. The implementation represents a complete from-scratch build of the transformer architecture, including custom word embeddings, novel position encoding, and sophisticated build system architecture.

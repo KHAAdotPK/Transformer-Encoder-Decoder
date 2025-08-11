@@ -1,4 +1,8 @@
-# Transformer Input Sequence Analysis 
+# Transformer Input Sequence Analysis
+
+#### Written by, Sohail Qayum Malik
+
+---
 
 ## Project Overview
 
