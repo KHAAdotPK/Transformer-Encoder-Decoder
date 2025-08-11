@@ -287,7 +287,7 @@ class Model
                             dimension_pair = (t)((j - 1) / 2); // Integer division
                         }
                         
-                        t exponent = -std::log(10000.0) * (2.0 * dimension_pair) / (t)dm;
+                        t exponent = -std::log(SCALING_FACTOR_CONSTANT) * (2.0 * dimension_pair) / (t)dm;
                         dt[i * dt.getShape().getNumberOfColumns() + j] = std::exp(exponent);
 
                         /*t exponent = -std::log(10000.0) * (2.0 * j) / (t)dm;

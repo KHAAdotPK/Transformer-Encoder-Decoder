@@ -24,6 +24,7 @@ set build_verbose_option_for_encoder_input="BuildEncoderInputVerbose=no"
 set build_verbose_option_for_encoder_output="BuildEncoderOutputVerbose=no"
 set build_verbose_option_for_input_sequence="BuildInputSequenceVerbose=no"
 set build_verbose_option_for_encoder_input_output="BuildEncoderInputOutputVerbose=no" 
+set build_verbose_option_for_position_encoding_encoder_input="BuildPositionEncodingEncoderInputVerbose=no"
 set temporary_stress_test_backward_in_forward_propogation="TemporaryStressTestBackwardInForwardPropogation=no"
 set verbose_option=
 set w1_filename_option="./data/weights/w1p.dat"
@@ -66,7 +67,9 @@ if "%1"=="verbose" (
         ) else if "%2" == "verbose_is" (
             set build_verbose_option_for_input_sequence="BuildInputSequenceVerbose=yes"
         ) else if "%2" == "verbose_ei_eo" (
-            set build_verbose_option_for_encoder_input_output="BuildEncoderInputOutputVerbose=yes"    
+            set build_verbose_option_for_encoder_input_output="BuildEncoderInputOutputVerbose=yes"
+        ) else if "%2" == "verbose_pe_ei" (
+            set build_verbose_option_for_position_encoding_encoder_input="BuildPositionEncodingEncoderInputVerbose=yes"
         ) else (
             echo Unknown build option: %2
             exit /b 1
@@ -86,7 +89,7 @@ goto :run
 @rem /p is short for /property
 @rem msbuild lib\libpng\libpng.csproj /p:Configuration=Debug /p:Platform=x64
 @rem msbuild project.xml /p:CSVPreprocessorDefinitions=yes
-@ msbuild project.xml /p:%build_verbose_option_for_position_encoding% /p:%build_verbose_option% /p:%temporary_stress_test_backward_in_forward_propogation% /p:%build_verbose_option_for_target_encoding% /p:%build_verbose_option_for_encoder_input% /p:%build_verbose_option_for_encoder_output% /p:%build_verbose_option_for_input_sequence% /p:%build_verbose_option_for_encoder_input_output%
+@ msbuild project.xml /p:%build_verbose_option_for_position_encoding% /p:%build_verbose_option% /p:%temporary_stress_test_backward_in_forward_propogation% /p:%build_verbose_option_for_target_encoding% /p:%build_verbose_option_for_encoder_input% /p:%build_verbose_option_for_encoder_output% /p:%build_verbose_option_for_input_sequence% /p:%build_verbose_option_for_encoder_input_output% /p:%build_verbose_option_for_position_encoding_encoder_input%
 goto :eof
 
 :run

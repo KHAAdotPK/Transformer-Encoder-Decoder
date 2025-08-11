@@ -26,6 +26,7 @@
             <PreprocessorDefinitions Condition="'$(BuildEncoderInputVerbose)'=='yes'">MAKE_THIS_MODEL_VERBOSE_FOR_ENCODER_INPUT</PreprocessorDefinitions>
             <PreprocessorDefinitions Condition="'$(BuildEncoderOutputVerbose)'=='yes'">MAKE_THIS_MODEL_VERBOSE_FOR_ENCODER_OUTPUT</PreprocessorDefinitions>
             <PreprocessorDefinitions Condition="'$(BuildEncoderInputOutputVerbose)'=='yes'">MAKE_THIS_MODEL_VERBOSE_FOR_ENCODER_OUTPUT;MAKE_THIS_MODEL_VERBOSE_FOR_ENCODER_INPUT</PreprocessorDefinitions>
+            <PreprocessorDefinitions Condition="'$(BuildPositionEncodingEncoderInputVerbose)'=='yes'">MAKE_THIS_MODEL_VERBOSE_FOR_POSITION_ENCODING;MAKE_THIS_MODEL_VERBOSE_FOR_ENCODER_INPUT</PreprocessorDefinitions>
             <PreprocessorDefinitions Condition="'$(BuildInputSequenceVerbose)'=='yes'">MAKE_THIS_MODEL_VERBOSE_FOR_INPUT_SEQUENCE</PreprocessorDefinitions>
 	        <PreprocessorDefinitions Condition="'$(TemporaryStressTestBackwardInForwardPropogation)'=='yes'">STRESS_TEST_BACKWARD_PASS_IN_FORWARD_PASS</PreprocessorDefinitions>
         </ClCompile>                                        
