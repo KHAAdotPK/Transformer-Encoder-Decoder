@@ -180,6 +180,28 @@ class Encoder
              * - Adds O(N·d_model) time complexity (trivial vs attention's O(N²·d_model))
              * - No memory overhead
              * - Critical for correctness worth the minor cost
+             */
+            /*
+                Forward Pass
+               ---------------
+               When training the model, the forward pass computes outputs, 
+               this forward pass propagates the input(encoder input) through all encoder layers
+               @ei, encoder input
+               @return, the output of the last encoder layer
+    
+               NOTE: PADDING CLEANUP HANDLED EXTERNALLY
+               =======================================
+               This method returns raw encoder output which may contain non-zero values 
+               in padded positions due to:
+               - FFN bias terms, layer normalization, residual connections
+               - Floating-point precision artifacts
+    
+               IMPORTANT: The training loop applies ADHOC_IMPLEMENTATION_OF_MASK_QUERY() 
+               after this method to zero out padded rows before passing to decoder.
+               This external cleanup allows easy debugging by commenting out the masking 
+               to inspect raw encoder outputs.
+    
+               See training loop for padding enforcement implementation.
              */            
             return output;
         }

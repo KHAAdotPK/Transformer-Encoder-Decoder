@@ -293,7 +293,8 @@ typedef enum { PreAttentionAndFeedForwardNetwork, PostAttentionAndFeedForwardNet
 //0x100 = 256
 //0x080 = 128
 //0x040 = 64
-#define DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER 0x040
+//0x10 = 16
+#define DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER 0x10
 
 /*
     The dropout_rate is a hyperparameter typically set between 0.1 and 0.5

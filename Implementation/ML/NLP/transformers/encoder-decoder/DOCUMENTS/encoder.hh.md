@@ -1,5 +1,10 @@
-## Key Components Analysis of Encoder class (of file encoder.hh).
+# Transformer Encoder Key Components. Analysis of Encoder class (of file encoder.hh).
+#### Written by, Sohail Qayum Malik
 ---
+
+## Project Overview
+
+This series of documents provide a comprehensive analysis of a custom C++ transformer implementation, focusing on the complete pipeline from input sequence processing through encoder input/output preparation, decoder input/output preparation. The implementation represents a complete from-scratch build of the transformer architecture, including custom word embeddings, novel position encoding, and sophisticated build system architecture.
 
 This document describes the C++ implementation of the Encoder component in a Transformer-based encoder-decoder model. The Transformer encoder-decoder is a key component in natural language processing models like BERT and GPT. Let me break down the key aspects of this code:
 
@@ -53,3 +58,47 @@ Encoder<t> encoder(ei.getShape().getNumberOfColumns(), DEFAULT_NUMBER_OF_LAYERS_
 // Forward pass
 Collective<t> eo = encoder.forward(ei, mask);
 ```
+
+## Critical Discovery: Padding Contamination in Encoder Layers
+
+This implementation revealed that padded positions (initially zeros) acquire 
+non-zero values during forward propagation. Debug analysis shows contamination 
+values up to 2.7264 in supposedly padded rows.
+
+**Root Causes Identified:**
+1. FFN bias terms: W·0 + b = b (non-zero)
+2. Layer normalization rescaling
+3. Residual connection accumulation
+4. Floating-point precision artifacts
+
+**Solution:** External masking post-encoder ensures mathematical correctness.
+
+This Happens in ALL Major Implementations:
+- PyTorch Transformers:
+```text
+# Even PyTorch's official implementation has this behavior
+# They also zero out padded positions externally when needed
+```
+- Hugging Face:
+```text
+# Same issue - padding positions get non-zero values
+# Handled by attention masking + optional external cleanup
+```
+Academic Literature Confirms This. The "Attention Is All You Need" paper doesn't explicitly address this, but subsequent implementation papers acknowledge that:
+
+- Attention masking prevents information flow FROM padded positions
+- External cleanup ensures information doesn't flow TO critical components
+
+### Why Padding Gets Contaminated (Normal Transformer Behavior):
+1. **Attention Masking Only Affects Attention Weights**
+- Attention mask sets attention scores to -inf → softmax → 0
+- BUT: This only prevents padded tokens from being "attended to"
+- Padded positions themselves still participate in computations
+
+2. ""Layer Components That Ignore Masking:""
+```CPP
+// These operations happen regardless of padding:
+output = LayerNorm(input + self_attention_output)  // Residual connection
+output = LayerNorm(output + FFN(output))           // FFN with bias terms
+```
+

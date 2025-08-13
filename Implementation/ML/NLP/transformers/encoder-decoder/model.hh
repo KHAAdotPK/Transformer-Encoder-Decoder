@@ -212,10 +212,10 @@ class Model
          * - Final PE matrix has alternating sine/cosine pattern across dimensions
          */
         /*
-            m    n
+            m = rows    n  = columns
             p = mntpl_input x 1
             mask = 1 x mntpl_input
-            n    p           
+            n = rows    p = columns          
             m x p                 
             p * mask   
          */
@@ -286,25 +286,31 @@ class Model
                         {
                             dimension_pair = (t)((j - 1) / 2); // Integer division
                         }
-                        
-                        t exponent = -std::log(SCALING_FACTOR_CONSTANT) * (2.0 * dimension_pair) / (t)dm;
-                        dt[i * dt.getShape().getNumberOfColumns() + j] = std::exp(exponent);
 
+                        /* 
+                            pos/antilog{(2i/d_model)*log(10,000)} => -1*(pos*antilog{(2i/d_model)*log(10,000)})
+                         */
+
+                        t exponent = (((2*dimension_pair)/(t)dm) * std::log(SCALING_FACTOR_CONSTANT));
+                        
+                        //t exponent = -std::log(SCALING_FACTOR_CONSTANT) * (2.0 * dimension_pair) / (t)dm; // I COMMENTED THIS.... 
+                        dt[i * dt.getShape().getNumberOfColumns() + j] =  (i/std::pow(10, exponent));  /*std::exp(exponent);*/ // I COMMENTED THIS AS WELL 
+
+
+                        // THIS IS OLD WORK DONOT CONSIDER THIS.....
                         /*t exponent = -std::log(10000.0) * (2.0 * j) / (t)dm;
                         dt[i*dt.getShape().getNumberOfColumns() + j] = std::exp(exponent);*/
-
-                        /*dt[i*dt.getShape().getNumberOfColumns() + j] = std::exp(value * (t)(SCALING_FACTOR(SCALING_FACTOR_CONSTANT, dm)));*/
- 
+                        /*dt[i*dt.getShape().getNumberOfColumns() + j] = std::exp(value * (t)(SCALING_FACTOR(SCALING_FACTOR_CONSTANT, dm)));*/ 
                         /*value = value + (t)(2*i);  // Increments by 2*/
                     }              
                 }                
  
                 Collective<t> p_to_dt = p * dt;
 
-                for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < p_to_dt.getShape().getN(); i++)
+                for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < /*p_to_*/dt.getShape().getN(); i++)
                 {
-                    sin_transformed_product[i] = std::sin(p_to_dt[i]);
-                    cos_transformed_product[i] = std::cos(p_to_dt[i]);
+                    sin_transformed_product[i] = std::sin(/*p_to_*/dt[i]);
+                    cos_transformed_product[i] = std::cos(/*p_to_*/dt[i]);
                 }                          
 #ifdef MAKE_THIS_MODEL_VERBOSE_FOR_POSITION_ENCODING                
                 /*std::cout<< "sin_transformed_product, Columns: " << sin_transformed_product.getShape().getNumberOfColumns() << ", Rows: " << sin_transformed_product.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;*/

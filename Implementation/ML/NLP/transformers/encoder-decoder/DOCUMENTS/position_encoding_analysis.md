@@ -2,6 +2,9 @@
 
 #### Written by, Sohail Qayum Malik
 
+(PLEASE NOTE:- THERE ARE ERRORS INN THIS DOCUMENT)
+(IMPLEMENTATON IS CREATING POSITION ENCODINGS CORRECTLY)
+
 ---
 
 ## Project Overview
@@ -34,7 +37,7 @@ Shape of mask is (1 row, 3 columns)
 
 ## Step-by-Step Breakdown
 
-### Step 1: Create Position Numbers
+### ~~Step 1: Create Position Numbers~~
 
 ```text
 p: [1, 2, 3] // Because our max sentence length is 3, and according to our mask that third word is represented by padding byte (look at the mask)
@@ -70,13 +73,17 @@ frequency = 1 / (10000^(dimension_pair/64)) // dimension pairing, the duplicate 
 
 From the debug output: 
 ```text
-1 1 0.749894 0.749894 0.562341 0.562341 0.421697 0.421697 0.316228 0.316228 0.237137 0.237137 0.177828 0.177828 0.133352 0.133352 0.1 0.1 0.0749894 0.0749894 0.0562341 0.0562341 0.0421697 0.0421697 0.0316228 0.0316228 0.0237137 0.0237137 0.0177828 0.0177828 0.0133352 0.0133352 0.01 0.01 0.00749894 0.00749894 0.00562341 0.00562341 0.00421697 0.00421697 0.00316228 0.00316228 0.00237137 0.00237137 0.00177828 0.00177828 0.00133352 0.00133352 0.001 0.001 0.000749894 0.000749894 0.000562341 0.000562341 0.000421697 0.000421697 0.000316228 0.000316228 0.000237137 0.000237137 0.000177828 0.000177828 0.000133352 0.000133352 
+0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 
+1 1 0.0705842 0.0705842 0.00498213 0.00498213 0.00035166 0.00035166 2.48216e-05 2.48216e-05 1.75201e-06 1.75201e-06 1.23664e-07 1.23664e-07 8.72875e-09 8.72875e-09 
+2 2 0.141168 0.141168 0.00996426 0.00996426 0.000703319 0.000703319 4.96432e-05 4.96432e-05 3.50403e-06 3.50403e-06 2.47329e-07 2.47329e-07 1.74575e-08 1.74575e-08 
 ```
 
 **Key insight**: Values/Dimensions come in pairs (`this is the dimension pairing in action`) because:
 - Dimensions 0&1 share frequency, 2&3 share frequency, 4&5 share frequency, etc.
 - Each pair shares the same base frequency but uses different trigonometric functions(sine for first member of pair and cosine for second member of the pair).
-- Frequency is scaled and it uses exponential decay with dimension pairing so frequencies get smaller for higher dimensions (like 1 → 0.749894 → 0.562341...). 
+- Frequency is scaled and it uses exponential decay with dimension pairing so frequencies get smaller for higher dimensions (like 1 → 0.749894 → 0.562341...).
+- When 0-based indexing is used for tokens, the vector 1 is vectors of all zeros. 
+- The vector for pos=2 should be roughly double the vector for pos=1 before the sin/cos functions are applied. 
 
 ### Step 4: Apply Sine and Cosine Functions
 
