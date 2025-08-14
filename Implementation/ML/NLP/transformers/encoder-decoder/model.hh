@@ -219,7 +219,68 @@ class Model
             m x p                 
             p * mask   
          */
-        void buildPositionEncoding(Collective<t>& p, Collective<t>& pe, Collective<t>& dt, cc_tokenizer::string_character_traits<char>::size_type dm, Collective<t>& is, Collective<t>& mask, cc_tokenizer::string_character_traits<char>::size_type mntpl_input, Collective<t>& sin_transformed_product, Collective<t>& cos_transformed_product) throw (ala_exception)
+        void buildPositionEncoding(Collective<t>& pe, Collective<t>& dt, cc_tokenizer::string_character_traits<char>::size_type dm, Collective<t>& is, Collective<t>& mask, cc_tokenizer::string_character_traits<char>::size_type mntpl_input, Collective<t>& sin_transformed_product, Collective<t>& cos_transformed_product) throw (ala_exception)
+        {
+            try
+            {
+                for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < dt.getShape().getDimensionsOfArray().getNumberOfInnerArrays(); i++)
+                {
+                    /* Generate position indices: range from POSITIONAL_ENCODING_START_VALUE(inclusive) to input sequence-length(exclusive), sequence-length is the number of tokens in a line. */
+                    for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < dm; j++)
+                    {                        
+
+                        t dimension_pair = (t)0;
+
+                        // For even j: use j/2, for odd j: use (j-1)/2 
+                        // This ensures pairs of dimensions have the same base frequency 
+                        if ( (j % 2) == 0 ) // Even
+                        {
+                            dimension_pair = (t)(j / 2); // Integer division
+                        } 
+                        else // Odd 
+                        {
+                            dimension_pair = (t)((j - 1) / 2); // Integer division
+                        }
+
+                        t exponent = (((2*dimension_pair)/(t)dm) * std::log(SCALING_FACTOR_CONSTANT));
+                                                
+                        dt[i * dt.getShape().getNumberOfColumns() + j] =  (i/std::pow(10, exponent));
+                    }              
+                }                
+                 
+                for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < dt.getShape().getN(); i++)
+                {
+                    sin_transformed_product[i] = std::sin(dt[i]);
+                    cos_transformed_product[i] = std::cos(dt[i]);
+                }                          
+#ifdef MAKE_THIS_MODEL_VERBOSE_FOR_POSITION_ENCODING                
+                /*std::cout<< "sin_transformed_product, Columns: " << sin_transformed_product.getShape().getNumberOfColumns() << ", Rows: " << sin_transformed_product.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;*/
+#endif                                
+                /* Fill even and odd indices separately */
+                for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < pe.getShape().getN(); i+=2)
+                {                       
+                    pe[i] = sin_transformed_product[i] * mask[i/pe.getShape().getNumberOfColumns()];
+                }
+                for (cc_tokenizer::string_character_traits<char>::size_type i = 1; i < pe.getShape().getN(); i+=2)
+                {
+                    pe[i] = cos_transformed_product[i] * mask[i/pe.getShape().getNumberOfColumns()];
+                }
+            }
+            catch (std::bad_alloc& e)
+            {
+                throw ala_exception(cc_tokenizer::String<char>("Model::buildPositionEncoding() Error: ") + cc_tokenizer::String<char>(e.what()));
+            }
+            catch (std::length_error& e)
+            {
+                throw ala_exception(cc_tokenizer::String<char>("Model::buildPositionEncoding() Error: ") + cc_tokenizer::String<char>(e.what()));
+            }            
+            catch (ala_exception& e)
+            {
+                throw ala_exception(cc_tokenizer::String<char>("Model::buildPositionEncoding() -> ") + cc_tokenizer::String<char>(e.what()));
+            }
+        }
+
+        void buildPositionEncoding_old(Collective<t>& p, Collective<t>& pe, Collective<t>& dt, cc_tokenizer::string_character_traits<char>::size_type dm, Collective<t>& is, Collective<t>& mask, cc_tokenizer::string_character_traits<char>::size_type mntpl_input, Collective<t>& sin_transformed_product, Collective<t>& cos_transformed_product) throw (ala_exception)
         {            
             try
             {   /*
@@ -641,7 +702,7 @@ class Model
 
 #ifdef MAKE_THIS_MODEL_VERBOSE_FOR_POSITION_ENCODING                                
 #endif                                
-                                buildPositionEncoding(p, pe, dt, dm, is, mask, mntpl_input, sin_transformed_product, cos_transformed_product);
+                                buildPositionEncoding(pe, dt, dm, is, mask, mntpl_input, sin_transformed_product, cos_transformed_product);
 #ifdef MAKE_THIS_MODEL_VERBOSE_FOR_POSITION_ENCODING                                
                                 std::cout<< "::: DEBUG DATA -: (Model::buildPositionEncoding()) for Position Encoding) :- :::"  << std::endl;                                                                                                                                                                
                                 std::cout<< "Transposed(p * mask), Columns: " << p.getShape().getNumberOfColumns() << ", Rows: " << p.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;                                                                
@@ -706,7 +767,22 @@ class Model
                                     }
                                 }                                
 #endif                          
-                                ei = Numcy::concatenate(pe, is); 
+                                /* 
+                                    Concatenation Instead of Addition
+                                    ---------------------------------
+                                    A quick look at the values confirms that you have concatenated the pe matrix (3x64) and the is matrix (3x16) side-by-side. 64 + 16 = 80.
+                                    This is a fundamental architectural error based on the original Transformer paper ("Attention Is All You Need").                                    
+                                    The fundamental rule for combining token embeddings and positional encodings is that... 
+                                    the encoder input should be the element-wise sum of the input embeddings and the positional encodings, and...
+                                    this is only possible if they have the same dimensions
+
+                                    What is wrong with concatination
+                                    --------------------------------
+                                    By concatenating them, you are creating a new, much larger feature vector (d_model=80) that is not standard and...
+                                    will force all subsequent layers (like the Multi-Head Attention and Feed-Forward networks) to handle this larger dimension.
+                                 */                                
+                                //ei = Numcy::concatenate(pe, is); 
+                                ei = pe + is;
 #ifdef MAKE_THIS_MODEL_VERBOSE_FOR_ENCODER_INPUT                                                                
                                 std::cout<< "::: DEBUG DATA -: Encoder Input(ei) :- :::"  << std::endl;
                                 std::cout<< "Columns: " << ei.getShape().getNumberOfColumns() << ", Rows: " << ei.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
