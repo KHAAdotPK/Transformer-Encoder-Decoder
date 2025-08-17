@@ -157,10 +157,6 @@ class Model
          * The function handles padding tokens by applying a mask to ensure they receive 
          * zero position encodings, maintaining the semantic meaning that padding tokens 
          * do not contribute to positional understanding.
-         *
-         * @param p  An output parameter of type `Collective<t>` representing position indices.
-         *           Shape: [1 x mntpl_input]. Contains sequential position values from 
-         *           POSITIONAL_ENCODING_START_VALUE to sequence length, masked for padding.
          * 
          * @param pe An output parameter of type `Collective<t>` that stores the final position encodings.
          *           Shape: [sequence_length x dm]. Contains alternating sine/cosine values 
@@ -229,17 +225,17 @@ class Model
                     for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < dm; j++)
                     {                        
 
-                        t dimension_pair = (t)0;
+                        cc_tokenizer::string_character_traits<char>::size_type dimension_pair = 0;
 
                         // For even j: use j/2, for odd j: use (j-1)/2 
                         // This ensures pairs of dimensions have the same base frequency 
                         if ( (j % 2) == 0 ) // Even
                         {
-                            dimension_pair = (t)(j / 2); // Integer division
+                            dimension_pair = (j / 2); // Integer division
                         } 
                         else // Odd 
                         {
-                            dimension_pair = (t)((j - 1) / 2); // Integer division
+                            dimension_pair = ((j - 1) / 2); //  Integer division. For two consecutive dimensions, we use the same frequency
                         }
 
                         t exponent = (((2*dimension_pair)/(t)dm) * std::log(SCALING_FACTOR_CONSTANT));
@@ -845,7 +841,7 @@ class Model
                                           that was originally all zeros remains all zeros throughout the encoding process.
                                         - The following statement explicitly enforces this constraint by applying a masking operation
                                  */
-                                ADHOC_IMPLEMENTATION_OF_MASK_QUERY(eo, mask, true);
+                                /*ADHOC_IMPLEMENTATION_OF_MASK_QUERY(eo, mask, true);*/
 #ifdef MAKE_THIS_MODEL_VERBOSE_FOR_ENCODER_OUTPUT
                                 std::cout<< "::: DEBUG DATA -: Encoder Output(eo) :- :::"  << std::endl;
                                 std::cout<< "Columns: " << eo.getShape().getNumberOfColumns() << ", Rows: " << eo.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
