@@ -529,6 +529,11 @@ class Model
                 throw ala_exception(cc_tokenizer::String<char>("Model::buildTargetSequence() -> ") + cc_tokenizer::String<char>(e.what())); 
             }            
         }
+
+        void buildDecoderInputAndMask(Collective<t>& di) throw (ala_exception)
+        {
+            
+        }
     
         /*
             @es, epochs
@@ -623,14 +628,29 @@ class Model
                         ptr = cc_tokenizer::allocator<t>().allocate((mntpl_target + 2)*(mntpl_target + 2));
                         memset(ptr, 0, sizeof(t)*((mntpl_target + 2)*(mntpl_target + 2)));
                         tsm = Collective<t>{ptr, DIMENSIONS{mntpl_target + 2, mntpl_target + 2, NULL, NULL}};
-                        
+
+                        // Decoder related 
+                        ptr = (t*)cc_tokenizer::allocator<cc_tokenizer::string_character_traits<char>::size_type>().allocate(DECODER_INPUT_DIMMENSIONS);
+                        memset(ptr, 0, sizeof(cc_tokenizer::string_character_traits<char>::size_type)*DECODER_INPUT_DIMMENSIONS);
+                        ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[0] = 1; // Batch size
+                        ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[1] = mntpl_target + 2; // Sequence length + begining marker + ending marker
+                        ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[2] = dm; // d_model                                                        
+                        DIMENSIONSOFARRAY dimensionsOfDecoderInput((cc_tokenizer::string_character_traits<char>::size_type*)ptr, DECODER_INPUT_DIMMENSIONS);
+                        DIMENSIONS decoderInputShape(dimensionsOfDecoderInput);
+                        //std::cout<< "Decoder Input columns: " << decoderInputShape.getNumberOfColumns() << ", Rows: " << decoderInputShape.getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
+                        ptr = cc_tokenizer::allocator<t>().allocate(decoderInputShape.getN());
+                        memset(ptr, 0, sizeof(t)*decoderInputShape.getN());
+                        di = Collective<t>{ptr, decoderInputShape};
+                                                                        
                         for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < es; i++)
                         {
                             if (v)
                             {                        
                                 std::cout<< "Epoch " << (i + 1) << ", batch size set to a single line and total number of lines in input vocabulary is " << icp.get_total_number_of_lines()<< " and total number of lines in target vocabulary is " << tcp.get_total_number_of_lines() << std::endl;
                             }
-
+#ifdef  MAKE_THIS_MODEL_VERBOSE_FOR_DECODER_INPUT                                
+                            std::cout<< "Decoder Input columns: " << decoderInputShape.getNumberOfColumns() << ", Rows: " << decoderInputShape.getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
+#endif                              
                             for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < iv.get_number_of_lines(); j++)
                             {
                                 icp.get_line_by_number(j + 1);
@@ -683,7 +703,7 @@ class Model
                                         std::cout<< std::endl;
                                     }
                                 }
-                                std::cout<< "::: DEBUG DATA -: Model::buildTargetSequence() :- :::"  << std::endl;
+                                /*std::cout<< "::: DEBUG DATA -: Model::buildTargetSequence() :- :::"  << std::endl;*/
                                 std::cout<< "tsm(Target Sequence Mask), Columns: " << tsm.getShape().getNumberOfColumns() << ", Rows: " << tsm.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
                                 for (int k = 0; k < tsm.getShape().getN(); k++)
                                 {
@@ -693,7 +713,6 @@ class Model
                                         std::cout<< std::endl;
                                     }
                                 }
-
 #endif
 
 #ifdef MAKE_THIS_MODEL_VERBOSE_FOR_POSITION_ENCODING                                
@@ -856,7 +875,7 @@ class Model
                                 }
                                 std::cout<< "*++++++++++++++++++++++++++++++++++++++*" << std::endl;
 #endif                                                                
-                                Decoder<t> decoder(eo.getShape().getNumberOfColumns(), DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER);
+                                Decoder<t> decoder(eo.getShape().getNumberOfColumns(), DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER);                                                               
                                 
                                 /* Reinitialize, input sequence and input sequence mask */
                                 /*for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < p.getShape().getN(); k++)
@@ -894,6 +913,10 @@ class Model
                                 for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < tsm.getShape().getN(); k++)
                                 {
                                     tsm[k] = 0;
+                                }
+                                for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < di.getShape().getN(); k++)
+                                {
+                                    di[k] = 0;
                                 }
                             }
                         }

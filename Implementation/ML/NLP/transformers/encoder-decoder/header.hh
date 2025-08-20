@@ -22,9 +22,11 @@
     // - `decoder_mask`: A mask to prevent the decoder from attending to certain positions in its own output.
  */
 #define DECODER_INPUT_PAD_VALUE 0 // <PAD>
-#define DECODER_INPUT_BEGINNING_OF_SEQUENCE 1 // <BOS> or <START>
+#define DECODER_INPUT_BEGINNING_OF_SEQUENCE 1 // <BOS> or <START>, <BOS> is Beginning Of Sequence
 #define DECODER_INPUT_END_OF_SEQUENCE 2 // <EOS> or <END>
 #define DECODER_INPUT_UNKNOWN_VALUE 3 // <UNK>
+
+#define DECODER_INPUT_DIMMENSIONS 3 // Input dimensions, typically 3D tensor: [batch_size, sequence_length, d_model]
 
 /*
     1. decoder_input (parameter 1):
@@ -35,6 +37,14 @@
        - During INFERENCE: Previously generated tokens + current prediction
        - Shape: [batch_size, target_sequence_length, d_model]
        - Gets processed through masked self-attention (can't see future tokens)
+
+       d_model is a Hyperparameter:
+         - Represents the dimensionality of the model's embeddings.
+         - These are not pre-trained like Word2Vec they start as random numbers and are trained from scratch...
+           typically small numbers from a Gaussian or uniform distribution).
+         - Common values: 128, 256, 512, 1024 (depends on model size)
+         - Higher d_model = more capacity, but also more computation
+         - During training, these vectors are updated via backpropagation to capture meaningful semantic relationships.
 
     3. decoder_mask (Look-ahead mask) (parameter 3):
        - Prevents decoder from attending to future tokens
