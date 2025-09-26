@@ -530,7 +530,7 @@ class Model
             }                        
         }
 
-        void buildDecoderInputAndMask(Collective<t>& di) throw (ala_exception)
+        void buildDecoderInputFromTargetSequenceAndTargetMask(Collective<t>& di, Collective<t>& ts, Collective<t>& tsm) throw (ala_exception)
         {
 
         }
@@ -875,7 +875,8 @@ class Model
                                 }                                
 #endif                                                                
                                 Decoder<t> decoder(eo.getShape().getNumberOfColumns(), DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER);
-                                buildDecoderInputAndMask(di);
+                                buildDecoderInputFromTargetSequenceAndTargetMask(di, ts, tsm);
+                                //buildDecoderInputAndMask(di);
                                 decoder.forward(di, eo, tsm, mask);
                                 /* Reinitialize, input sequence and input sequence mask */
                                 /*for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < p.getShape().getN(); k++)
