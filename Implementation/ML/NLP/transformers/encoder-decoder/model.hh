@@ -460,7 +460,7 @@ class Model
          *          and the masking ensures it can't attend to padding positions or future positions during training. 
          */        
         void buildTragetSequence(cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>& tcp, CORPUS& tv, Collective<t>& ts/*, Collective<t>& di*/, Collective<t>& tsm, cc_tokenizer::string_character_traits<char>::size_type mntpl_target = 0, bool verbose = false) throw (ala_exception)
-        {               
+        {   
             try 
             {
                 ts[0] = DECODER_INPUT_BEGINNING_OF_SEQUENCE;
@@ -473,7 +473,9 @@ class Model
                     if (index != INDEX_NOT_FOUND_AT_VALUE)
                     {   
 
-                        ts[i + 1] = tv(tcp.get_token_by_number(i + 1));
+                        // Same thing but just stress testing things here... 
+                        ts[i + 1] = tv(tcp.get_token_by_number(i + 1)) /* index */;
+                        //std::cout<< "index = " << index << " ";
                     }
                     else
                     {
@@ -531,8 +533,49 @@ class Model
         }
 
         void buildDecoderInputFromTargetSequenceAndTargetMask(Collective<t>& di, Collective<t>& ts, Collective<t>& tsm) throw (ala_exception)
-        {
+        {               
+            DIMENSIONSOFARRAY dima = di.getShape().getDimensionsOfArray();
 
+            if (dima.size() != 3)
+            {
+                throw ala_exception(cc_tokenizer::String<char>("Model::buildDecoderInputFromTargetSequenceAndTargetMask(Collective<t>&, Collective<t>&, Collective<t>&) Error: Invalid decoder input dimensions: Expected 3D tensor (batch_size, seq_length, d_model+1), but received ") + cc_tokenizer::String<char>(dima.size()) + cc_tokenizer::String<char>("D tensor."));
+            }
+
+            cc_tokenizer::string_character_traits<char>::size_type batch_size = dima[0];
+            cc_tokenizer::string_character_traits<char>::size_type shifted_target_sequence_length = dima[1];
+            cc_tokenizer::string_character_traits<char>::size_type d_model = dima[2] - 1; // 1 is for TOKEN_ID - The total dimension is d_model + 1 where +1 reserves space for the token ID
+
+            if (!(ts.getShape().getN() == shifted_target_sequence_length))
+            {
+                throw ala_exception(cc_tokenizer::String<char>("Model::buildDecoderInputFromTargetSequenceAndTargetMask(Collective<t>&, Collective<t>&, Collective<t>&) Error: Sequence length mismatch: Target sequence length (") + cc_tokenizer::String<char>(ts.getShape().getN()) + cc_tokenizer::String<char>(") does not match decoder input sequence dimension (") + cc_tokenizer::String<char>(shifted_target_sequence_length) + cc_tokenizer::String<char>(")")); 
+            }
+            
+            cc_tokenizer::string_character_traits<char>::size_type i, j, k;
+
+            for (i = 0; i < batch_size; i++)
+            {
+                for (j = 0; j < shifted_target_sequence_length; j++)
+                {
+                    // TOKEN_ID APPEARS HERE: Storing the actual token ID from target sequence
+                    // This places the token ID at position [i, j, 0] in the 3D tensor
+                    di[(i*shifted_target_sequence_length*(d_model + 1)) + (j*(d_model + 1) /* At TOKEN_ID */)] = ts[j]; // TOKEN_ID stored here
+
+                    Collective<t> rand_values = Numcy::Random::randn<t>(DIMENSIONS{d_model, 1, NULL, NULL});
+
+                    for (k = 1; k <= d_model; k++)
+                    {
+                        di[(i*shifted_target_sequence_length*(d_model + 1 /* Passed TOKEN_ID */)) + (j*(d_model + 1 /* Passed TOKEN_ID */) + k)] = rand_values[k - 1];
+                    }
+
+                    // di[(i*shifted_target_sequence_length*(d_model + 1)) + (j*d_model)  ) => ts[j] /* token sequence value */
+                    // di[(i*shifted_target_sequence_length*(d_model + 1)) + (j*(d_model + 1)) /* passed ts value */ + k ) => rand_value[k] k is upto d_model
+                }
+            }
+
+            // Memory layout visualization for each sequence position [i, j]:
+            // [TOKEN_ID, embedding_0, embedding_1, ..., embedding_{d_model-1}]
+            // ^^^^^^^^^^ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            // Position 0            Positions 1 through d_model
         }
     
         /*
@@ -623,7 +666,7 @@ class Model
                         /* Target Sequence and Target Sequence Mask */
                         /* 2 is for two more memory locations to store <BOS> , <EOS> */
                         ptr = cc_tokenizer::allocator<t>().allocate(mntpl_target + 2);
-                        memset(ptr, DECODER_INPUT_PAD_VALUE, sizeof(t)*mntpl_target + 2);
+                        memset(ptr, DECODER_INPUT_PAD_VALUE, sizeof(t)*(mntpl_target + 2));
                         ts = Collective<t>{ptr, DIMENSIONS{mntpl_target + 2, 1, NULL, NULL}};
                         ptr = cc_tokenizer::allocator<t>().allocate((mntpl_target + 2)*(mntpl_target + 2));
                         memset(ptr, 0, sizeof(t)*((mntpl_target + 2)*(mntpl_target + 2)));
@@ -632,15 +675,23 @@ class Model
                         // Decoder related 
                         ptr = (t*)cc_tokenizer::allocator<cc_tokenizer::string_character_traits<char>::size_type>().allocate(DECODER_INPUT_DIMMENSIONS);
                         memset(ptr, 0, sizeof(cc_tokenizer::string_character_traits<char>::size_type)*DECODER_INPUT_DIMMENSIONS);
+                        /*
+                            Decoder input shape: [batch_size, shifted_target_sequence_length, d_model + 1]
+                         */
                         ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[0] = 1; // Batch size
                         ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[1] = mntpl_target + 2; // Sequence length + begining marker + ending marker
-                        ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[2] = dm; // d_model                                                        
+                        /*
+                            d_model is the standard term used in the Transformer architecture for the dimensionality of the model's hidden states. 
+                            TOKEN_ID with their embedding representation of sequence token (where token could be BOS, EOS of the actual token of the batch). 
+                            Due to +1 the dimensions are set so it accommodates both the token ID and its embedding representation.
+                         */
+                        ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[2] = dm + 1; // d_model + Place to store TOKEN_ID
+                        
                         DIMENSIONSOFARRAY dimensionsOfDecoderInput((cc_tokenizer::string_character_traits<char>::size_type*)ptr, DECODER_INPUT_DIMMENSIONS);
                         DIMENSIONS decoderInputShape(dimensionsOfDecoderInput);                                            
-                        std::cout<< "Decoder Input columns: " << decoderInputShape.getNumberOfColumns() << ", Rows: " << decoderInputShape.getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
+                        /*std::cout<< "Decoder Input columns: " << decoderInputShape.getNumberOfColumns() << ", Rows: " << decoderInputShape.getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;*/
                         ptr = cc_tokenizer::allocator<t>().allocate(decoderInputShape.getN());
                         memset(ptr, 0, sizeof(t)*decoderInputShape.getN());                        
-                        //di.decrementReferenceCount();
                         di = Collective<t>{ptr, decoderInputShape};
                                                                                                                         
                         for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < es; i++)
@@ -650,7 +701,7 @@ class Model
                                 std::cout<< "Epoch " << (i + 1) << ", batch size set to a single line and total number of lines in input vocabulary is " << icp.get_total_number_of_lines()<< " and total number of lines in target vocabulary is " << tcp.get_total_number_of_lines() << std::endl;
                             }
 #ifdef  MAKE_THIS_MODEL_VERBOSE_FOR_DECODER_INPUT                                
-                            std::cout<< "Decoder Input columns: " << decoderInputShape.getNumberOfColumns() << ", Rows: " << decoderInputShape.getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
+                            //std::cout<< "Decoder Input columns: " << decoderInputShape.getNumberOfColumns() << ", Rows: " << decoderInputShape.getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
 #endif                              
                             for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < iv.get_number_of_lines(); j++)
                             {
@@ -715,7 +766,6 @@ class Model
                                     }
                                 }
 #endif
-
 #ifdef MAKE_THIS_MODEL_VERBOSE_FOR_POSITION_ENCODING                                
 #endif                          
                                 buildPositionEncoding(pe, dt, dm, is, mask, mntpl_input, sin_transformed_product, cos_transformed_product);                                
@@ -876,9 +926,35 @@ class Model
 #endif                                                                
                                 Decoder<t> decoder(eo.getShape().getNumberOfColumns(), DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER);
                                 buildDecoderInputFromTargetSequenceAndTargetMask(di, ts, tsm);
-                                //buildDecoderInputAndMask(di);
+#ifdef MAKE_THIS_MODEL_VERBOSE_FOR_DECODER_INPUT
+                                std::cout<< "::: DEBUG DATA -: Decoder Input(di) :- :::"  << std::endl; 
+                                std::cout<< "Batch Size = " << di.getShape().getDimensionsOfArray()[0] << ", Shifted Right Sequence Length = " << di.getShape().getDimensionsOfArray()[1] << ", TOKEN_ID + d_model = " << di.getShape().getDimensionsOfArray()[2] << std::endl;
+                                {
+                                    cc_tokenizer::string_character_traits<char>::size_type x, y, z;
+                                    for (x = 0; x < di.getShape().getDimensionsOfArray()[0]; x++)
+                                    {
+                                        for (y = 0; y < di.getShape().getDimensionsOfArray()[1]; y++)
+                                        {
+                                            std::cout<< di[x*(di.getShape().getDimensionsOfArray()[1]*di.getShape().getDimensionsOfArray()[2]) + (y*(di.getShape().getDimensionsOfArray()[2] - 0))] << " [";
+
+                                            for (z = 1; z <= (di.getShape().getDimensionsOfArray()[2] - 1); z++)
+                                            {
+                                                std::cout<< di[x*(di.getShape().getDimensionsOfArray()[1]*di.getShape().getDimensionsOfArray()[2]) + (y*(di.getShape().getDimensionsOfArray()[2] - 0) + z)] << " ";
+                                            }
+
+                                            std::cout<< "]" << std::endl;
+                                        }
+
+                                        std::cout<< std::endl;
+                                    }
+                                }
+#endif                                                                                                
                                 decoder.forward(di, eo, tsm, mask);
-                                /* Reinitialize, input sequence and input sequence mask */
+
+                                /* *********************************************************************************************************************************************************************************************** */
+                                /* *********************************************************************************************************************************************************************************************** */
+                                /*                                                                      Reinitialize, input sequence and input sequence mask                                                                       */
+                                /* *********************************************************************************************************************************************************************************************** */
                                 /*for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < p.getShape().getN(); k++)
                                 {
                                     p[k] = 0;
