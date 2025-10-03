@@ -560,7 +560,9 @@ class Model
                     // This places the token ID at position [i, j, 0] in the 3D tensor
                     di[(i*shifted_target_sequence_length*(d_model + 1)) + (j*(d_model + 1) /* At TOKEN_ID */)] = ts[j]; // TOKEN_ID stored here
 
-                    Collective<t> rand_values = Numcy::Random::randn<t>(DIMENSIONS{d_model, 1, NULL, NULL});
+                    //Collective<t> rand_values = Numcy::Random::randn<t>(DIMENSIONS{d_model, 1, NULL, NULL});
+
+                    Collective<t> rand_values = Numcy::Random::randn_xavier(DIMENSIONS{d_model, 1, NULL, NULL}, false);
 
                     for (k = 1; k <= d_model; k++)
                     {
