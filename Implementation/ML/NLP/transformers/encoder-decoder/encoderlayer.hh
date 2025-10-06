@@ -153,7 +153,7 @@ class EncoderLayer
          *
          * @throws ala_exception    If any internal computation fails or input constraints are violated.
          */       
-        Collective<t> forward(Collective<t>& ei, Collective<t>& mask, ENCODER_LAYER_NORM_POSITION_TYPE norm_position = PreAttentionAndFeedForwardNetwork, bool is_training = true) throw (ala_exception)
+        Collective<t> forward(Collective<t>& ei, Collective<t>& mask, Collective<t>& attentionMaskInputSequence, ENCODER_LAYER_NORM_POSITION_TYPE norm_position = PreAttentionAndFeedForwardNetwork, bool is_training = true) throw (ala_exception)
         {
             /*
                 The output of MULTIHEADATTENTION::forward() is typically a transformed representation of the input sequence, where each token's representation has been updated based on attention over all tokens in the sequence. In a Transformer encoder, this output is usually processed further in the following steps:
@@ -251,13 +251,13 @@ class EncoderLayer
                 {
                     // Pre-LN for attention
                     residual = attention_norm.forward(ei);  // Normalize first
-                    residual = attention.forward(residual, residual, residual, mask);
+                    residual = attention.forward(residual, residual, residual/*, mask*/, attentionMaskInputSequence);
                     output = ei + residual;  // Add residual connection
                 }
                 else if (norm_position == PostAttentionAndFeedForwardNetwork)
                 {
                     // Post-LN for attention
-                    residual = attention.forward(ei, ei, ei, mask);
+                    residual = attention.forward(ei, ei, ei/*, mask*/, attentionMaskInputSequence);
                     output = ei + residual;  // Add residual connection
                     output = attention_norm.forward(output);  // Normalize after residual
                 }

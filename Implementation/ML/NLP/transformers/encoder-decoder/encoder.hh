@@ -107,7 +107,7 @@ class Encoder
             @return, the output of the last encoder layer
          */
         /*template <typename t = float>*/
-        Collective<t> forward(Collective<t>& ei, Collective<t>& mask) const
+        Collective<t> forward(Collective<t>& ei, Collective<t>& mask, Collective<t>& attentionMaskInputSequence) const
         {
             /*ENCODERLAYERLIST_PTR*/EncoderLayerList<t>* current = encoderLayerListHead;
 
@@ -123,7 +123,7 @@ class Encoder
                     2. The output is then passed through Layer Normalization (EncoderLayerNormalization)
                     3. The final output of the encoder layer is then sent to the next encoder layer (or decoder)
                  */
-                output = current->ptr->forward(output, mask);
+                output = current->ptr->forward(output, mask, attentionMaskInputSequence);
 
                 current = current->next;                    
             }

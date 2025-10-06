@@ -376,6 +376,92 @@ class Attention // Is all you need.
             return input_gradient; // Placeholder return value
         }
 
+        Collective<t> forward_research(Collective<t>& ei_query, Collective<t>& ei_key, Collective<t>& ei_value, Collective<t>& mask)
+        {                          
+            Collective<t> query, key, value, scores, attention_weights, output;
+
+            X_ei_query = ei_query;
+            X_ei_key = ei_key;
+            X_ei_value = ei_value;
+    
+            try
+            {
+                // 1. Project Q, K, V and apply scaling
+                query = Numcy::matmul<t>(ei_query, queryWeights) * scaleFactor;
+                key = Numcy::matmul<t>(ei_key, keyWeights) * scaleFactor;
+                value = Numcy::matmul<t>(ei_value, valueWeights);
+
+                // Cache the projected Q, K, V for the backward pass
+                this->masked_cached_query = query;
+                this->masked_cached_key = key;
+                this->masked_cached_value = value;
+       
+                // 2. Calculate attention scores
+                scores = Numcy::matmul<t>(query, Numcy::transpose(key)); 
+
+                // =================== ROBUST MASKING IMPLEMENTATION ===================
+                cc_tokenizer::string_character_traits<char>::size_type num_queries = scores.getShape().getNumberOfRows(); // e.g., 20
+                cc_tokenizer::string_character_traits<char>::size_type num_keys = scores.getShape().getNumberOfColumns();    // e.g., 3 or 20
+
+                // Check if we have a 2D mask (like the decoder's look-ahead mask)
+                if (mask.getShape().getNumberOfRows() == num_queries)
+                {
+                    // Case 1: Mask is 2D (e.g., 20x20), dimensions match scores exactly.
+                    for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < num_queries; ++i)
+                    {
+                        for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < num_keys; ++j)
+                        {
+                            if (mask[i * num_keys + j] == 0)
+                            {
+                                scores[i * num_keys + j] = -1e9;
+                            }
+                        }
+                    }
+                }
+                // Check if we have a 1D mask that needs broadcasting (like the encoder padding mask)
+                else if (mask.getShape().getNumberOfRows() == 1)
+                {
+                    // Case 2: Mask is 1D (e.g., 1x3), broadcast it across all query rows.
+                    for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < num_queries; ++i)
+                    {
+                        for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < num_keys; ++j)
+                        {
+                            // We only use the column index 'j' to check the 1D mask.
+                            if (mask[j] == 0)
+                            {
+                                scores[i * num_keys + j] = -1e9;
+                            }
+                        }
+                    }
+                }
+                // Optional: Add an error for unsupported mask shapes
+                else
+                {
+                    throw ala_exception("Attention::forward() -> Incompatible mask shape!");
+                }
+            // ====================================================================
+
+
+        
+                // 4. Apply softmax to get attention weights
+                attention_weights = softmax<t>(scores);
+                this->cached_attention_weights = attention_weights;
+        
+                // 5. Multiply weights by V to get the output
+                output = Numcy::matmul<t>(attention_weights, value);
+                this->cached_output_before_projection = output;
+        
+                // 6. Final linear projection
+                output = Numcy::matmul<t>(output, outputWeights);
+            }
+            catch(ala_exception& e)
+            {
+                throw ala_exception(cc_tokenizer::String<char>("Attention::forward() -> ") + cc_tokenizer::String<char>(e.what()));
+            }
+    
+            return output;
+        }
+
         /*
             --------------------------------------------------------------------
            | In the forward pass, we compute outputs using the current weights. |
@@ -422,7 +508,7 @@ class Attention // Is all you need.
             - The return value...
             3 The final output of the forward method is the weighted sum of the values, where the weights are the normalized attention scores.
          */        
-        Collective<t> forward(Collective<t>& ei_query, Collective<t>& ei_key, Collective<t>& ei_value, Collective<t>& mask)
+        Collective<t> forward(Collective<t>& ei_query, Collective<t>& ei_key, Collective<t>& ei_value/*, Collective<t>& mask*/, Collective<t>& attentionMask)
         {                          
             /*
                 Linear transformations, compute queries, keys, and values
@@ -488,7 +574,19 @@ class Attention // Is all you need.
                 // V: XW^V, X is the input to the MHA layer(a.k.a ei_value)                
                 value = Numcy::matmul<t>(ei_value, valueWeights); // No scaling for V
 
+                std::cout<< "query = " << query.getShape().getDimensionsOfArray().size() << std::endl;
+                std::cout<< "------------>>>> " << query.getShape().getNumberOfColumns() << ", " << query.getShape().getNumberOfRows() << std::endl;
+                std::cout<< "key = " << key.getShape().getDimensionsOfArray().size() << std::endl;
+                std::cout<< "------------>>>> " << key.getShape().getNumberOfColumns() << ", " << key.getShape().getNumberOfRows() << std::endl;
+                std::cout<< "value = " << value.getShape().getDimensionsOfArray().size() << std::endl;
+                std::cout<< "------------>>>> " << value.getShape().getNumberOfColumns() << ", " << value.getShape().getNumberOfRows() << std::endl;
+
                 /* I have checked with ADHOC_DEBUG_MACRO for the first run of above three functions their outputs keep the padding rows */
+
+                DIMENSIONSOFARRAY dimensionsOfArray = attentionMask.getShape().getDimensionsOfArray();
+                cc_tokenizer::string_character_traits<char>::size_type batch_size = dimensionsOfArray[0];
+                cc_tokenizer::string_character_traits<char>::size_type number_of_masks = dimensionsOfArray[1];
+                cc_tokenizer::string_character_traits<char>::size_type each_mask_size = dimensionsOfArray[2];
                 
                 /*
                     Masking has to be consistently applied in both forward and backward passes to avoid leaking gradient through padded tokens.                  
@@ -497,18 +595,50 @@ class Attention // Is all you need.
                     Note:-
                     Scores corresponding to masked tokens should be set to -inf (or a very negative number) before softmax so they get zero weight.
                  */
-                for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < value.getShape().getDimensionsOfArray().getNumberOfInnerArrays(); k++)
+                //for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < value.getShape().getDimensionsOfArray().getNumberOfInnerArrays(); k++)
+                //{
+                //    if (mask[k] == DECODER_INPUT_PAD_VALUE)
+                //    {
+                //        for (cc_tokenizer::string_character_traits<char>::size_type l = 0; l < value.getShape().getNumberOfColumns(); l++)
+                //        {
+                //            query[k*value.getShape().getNumberOfColumns() + l] = /*std::numeric_limits<t>::lowest()*/ 0;
+                //            key[k*value.getShape().getNumberOfColumns() + l] = /*std::numeric_limits<t>::lowest()*/ 0;
+                //            value[k*value.getShape().getNumberOfColumns() + l] = /*std::numeric_limits<t>::lowest()*/ 0;
+                //        }
+                //    }
+                //}
+
+                /*std::cout<< "-----<<<<<<<<<<<<<<<<<<<< " << query.getShape().getDimensionsOfArray().get_n() << std::endl;
+                std::cout<< attentionMask.getShape().getNumberOfRows() << std::endl;
+                std::cout<< query.getShape().getNumberOfColumns() << ", " << query.getShape().getNumberOfRows() << std::endl;
+                std::cout<< "---------------------------------------------------------------------------------------------" << std::endl;*/
+
+                /*for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < batch_size; j++)
                 {
-                    if (mask[k] == 0)
+                    for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < number_of_masks; k++)
                     {
-                        for (cc_tokenizer::string_character_traits<char>::size_type l = 0; l < value.getShape().getNumberOfColumns(); l++)
+                        for (cc_tokenizer::string_character_traits<char>::size_type l = 0; l < each_mask_size; l++)
                         {
-                            query[k*value.getShape().getNumberOfColumns() + l] = /*std::numeric_limits<t>::lowest()*/ 0;
-                            key[k*value.getShape().getNumberOfColumns() + l] = /*std::numeric_limits<t>::lowest()*/ 0;
-                            value[k*value.getShape().getNumberOfColumns() + l] = /*std::numeric_limits<t>::lowest()*/ 0;
+                            if (attentionMask[j*number_of_masks*each_mask_size + k*each_mask_size + l] == DECODER_INPUT_PAD_VALUE)
+                            {
+                                if ((attentionMask.getShape().getNumberOfRows()/batch_size) == 1)
+                                {
+                                    for (cc_tokenizer::string_character_traits<char>::size_type m = 0; m < value.getShape().getNumberOfColumns(); m++)
+                                    {
+                                        query[l*query.getShape().getNumberOfColumns() + m] = DECODER_INPUT_PAD_VALUE;                                        
+                                    }   
+                                }
+                                else
+                                {
+                                    std::cout<< "----->>>>>>>> " << query.getShape().getDimensionsOfArray().get_n() << std::endl;
+                                    std::cout<< attentionMask.getShape().getNumberOfRows() << std::endl;
+                                    //query[j*number_of_masks*each_mask_size + k*each_mask_size + l] = DECODER_INPUT_PAD_VALUE;    
+                                    query[k*each_mask_size + l] = DECODER_INPUT_PAD_VALUE;  
+                                }
+                            }
                         }
                     }
-                }
+                }*/
 
                 // Cache the transformed Q, K, V for backward pass
                 /*
@@ -528,6 +658,46 @@ class Attention // Is all you need.
                 /* Compute scaled dot-product attention scores */
                 scores = Numcy::matmul<t>(query, Numcy::transpose(key)); 
                 static_assert(std::is_same<cc_tokenizer::allocator<double>, cc_tokenizer::allocator<double>>::value, "Double allocator specialization missing");
+
+                std::cout<< "scores = " << scores.getShape().getDimensionsOfArray().size() << std::endl;
+                std::cout<< "------------>>>> " << scores.getShape().getNumberOfColumns() << ", " << scores.getShape().getNumberOfRows() << std::endl;
+                for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < scores.getShape().getNumberOfRows(); i++)
+                {
+                    for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < scores.getShape().getNumberOfColumns(); j++)
+                    {
+                        std::cout<< scores[i*scores.getShape().getNumberOfColumns() + j] << " ";
+                    }
+
+                    std::cout<< std::endl;
+                }
+
+
+                for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < batch_size; j++)
+                {
+                    for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < number_of_masks; k++)
+                    {
+                        for (cc_tokenizer::string_character_traits<char>::size_type l = 0; l < each_mask_size; l++)
+                        {
+                            if (attentionMask[j*number_of_masks*each_mask_size + k*each_mask_size + l] == DECODER_INPUT_PAD_VALUE)
+                            {
+                                if ((attentionMask.getShape().getNumberOfRows()/batch_size) == 1)
+                                {
+                                    scores[l*each_mask_size + l] = -1e9;  
+                                }
+                                else
+                                {
+                                    //std::cout<< "----->>>>>>>> " << query.getShape().getDimensionsOfArray().get_n() << std::endl;
+                                    //std::cout<< attentionMask.getShape().getNumberOfRows() << std::endl;
+                                    //query[j*number_of_masks*each_mask_size + k*each_mask_size + l] = DECODER_INPUT_PAD_VALUE;    
+                                    scores[k*each_mask_size + l] = -1e9;;  
+                                }
+                            }
+                        }
+                    }
+                }
+
+                
+                /*std::cout<< scores.getShape().getNumberOfColumns() << ", " << scores.getShape().getNumberOfRows() << std::endl;*/
 
                 /* ********************************************** */
                 /* IT IS HERE JUST FOR THE DOCUMENTATION PURPOSES */
@@ -575,8 +745,9 @@ class Attention // Is all you need.
                 /* // scores = scores / static_cast<double>(scaleFactor);
                    // std::cout << "Type of scaleFactor: " << typeid(decltype(scaleFactor)).name() << std::endl;*/
 
-                ADHOC_IMPLEMENTATION_OF_MASK_QUERY(scores, mask, false);
-                ADHOC_IMPLEMENTATION_OF_MASK_KEY(scores, mask, false);
+
+                        //ADHOC_IMPLEMENTATION_OF_MASK_QUERY(scores, /*mask,*/, attentionMask, false);
+                        //ADHOC_IMPLEMENTATION_OF_MASK_KEY(scores, /*mask,*/,  attentionMask, false);
 
                 /* ADHOC_DEBUG_MACRO(scores); */
                 

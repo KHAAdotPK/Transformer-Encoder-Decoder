@@ -194,13 +194,13 @@ typedef enum { PreAttentionAndFeedForwardNetwork, PostAttentionAndFeedForwardNet
              [0, 0, 0],  // This row is zeroed out because mask[1] == 0
              [7, 8, 9]]
 */
-#define ADHOC_IMPLEMENTATION_OF_MASK_QUERY(instance, mask, mask_with_zero_or_lowest_value)\
+#define ADHOC_IMPLEMENTATION_OF_MASK_QUERY(instance, attentionMaskInputSequence, mask_with_zero_or_lowest_value)\
 {\
     try\
     {\
         for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < instance.getShape().getDimensionsOfArray().getNumberOfInnerArrays(); k++)\
         {\
-            if (mask[k] == 0)\
+            if (attentionMaskInputSequence[k] == 0)\
             {\
                 for (cc_tokenizer::string_character_traits<char>::size_type l = 0; l < instance.getShape().getNumberOfColumns(); l++)\
                 {\

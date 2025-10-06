@@ -182,11 +182,19 @@ class Decoder
             } 
         }
         
-        Collective<t> forward(Collective<t>& decoder_input, Collective<t>& encoder_output, Collective<t>& decoder_mask, Collective<t>& encoder_mask) const        
+        Collective<t> forward(Collective<t>& decoder_input, Collective<t>& encoder_output, Collective<t>& decoder_mask /*attentionMaskTargetSequence*/, Collective<t>& encoder_mask /*attentionMaskInputSequence*/) const        
         {
             // Implement the forward pass logic here
             // This is a placeholder implementation
 
+            DecoderLayerList<t>* current = this->decoderLayerListHead;
+
+            while (current != NULL)            
+            {
+                current->ptr->forward(decoder_input, encoder_output, decoder_mask, encoder_mask);
+
+                current = current->next;
+            }
 
             return Collective<t>(NULL, DIMENSIONS{0, 0, NULL, NULL});
         }        

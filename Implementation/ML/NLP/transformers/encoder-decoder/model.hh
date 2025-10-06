@@ -102,7 +102,7 @@ class Model
          * Note: The Vocabulary object uses internal indexing that starts at INDEX_ORIGINATES_AT_VALUE.
          *       In contrast, word embeddings use zero-based indexing (starting at 0).
          */    
-        void buildInputSequence(cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>& icp, CORPUS& iv, Collective<t>& is, Collective<t>& mask, Collective<t>& W1, bool redundancy = ALLOW_REDUNDANCY, bool v = false) throw (ala_exception)
+        void buildInputSequence(cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>& icp, CORPUS& iv, Collective<t>& is, Collective<t>& mask, Collective<t>& attentionMask, Collective<t>& W1, bool redundancy = ALLOW_REDUNDANCY, bool v = false) throw (ala_exception)
         {                                                                                                                                            
             try
             {                           
@@ -119,6 +119,7 @@ class Model
                     {
                         /* Marking real tokens with a valid mask value */
                         mask[i] = DEFAULT_VALID_WORD_VECTOR_MASK_VALUE;
+                        attentionMask[i] = DEFAULT_VALID_WORD_VECTOR_MASK_VALUE;
             
                         /* we, Word Embedding */
                         Collective<t> we = W1.slice((index - INDEX_ORIGINATES_AT_VALUE /*TOKENIZER_PARSER_TOKEN_NUMBER_ORIGINATES_AT_INDEX*/ /*Indices in parser originate at 1 in parser*/)*W1.getShape().getNumberOfColumns(), W1.getShape().getNumberOfColumns());
@@ -215,7 +216,7 @@ class Model
             m x p                 
             p * mask   
          */
-        void buildPositionEncoding(Collective<t>& pe, Collective<t>& dt, cc_tokenizer::string_character_traits<char>::size_type dm, Collective<t>& is, Collective<t>& mask, cc_tokenizer::string_character_traits<char>::size_type mntpl_input, Collective<t>& sin_transformed_product, Collective<t>& cos_transformed_product) throw (ala_exception)
+        void buildPositionEncoding(Collective<t>& pe, Collective<t>& dt, cc_tokenizer::string_character_traits<char>::size_type dm, Collective<t>& is, Collective<t>& attentionMaskInputSequence /*mask*/, cc_tokenizer::string_character_traits<char>::size_type mntpl_input, Collective<t>& sin_transformed_product, Collective<t>& cos_transformed_product) throw (ala_exception)
         {
             try
             {
@@ -255,11 +256,11 @@ class Model
                 /* Fill even and odd indices separately */
                 for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < pe.getShape().getN(); i+=2)
                 {                       
-                    pe[i] = sin_transformed_product[i] * mask[i/pe.getShape().getNumberOfColumns()];
+                    pe[i] = sin_transformed_product[i] * attentionMaskInputSequence[i/pe.getShape().getNumberOfColumns()];
                 }
                 for (cc_tokenizer::string_character_traits<char>::size_type i = 1; i < pe.getShape().getN(); i+=2)
                 {
-                    pe[i] = cos_transformed_product[i] * mask[i/pe.getShape().getNumberOfColumns()];
+                    pe[i] = cos_transformed_product[i] * attentionMaskInputSequence[i/pe.getShape().getNumberOfColumns()];
                 }
             }
             catch (std::bad_alloc& e)
@@ -459,7 +460,7 @@ class Model
          * @note 2: If your target sequence is [SOS, "hello", "world", EOS, PAD, PAD], the decoder receives [SOS, "hello", "world", EOS, PAD] as input (shifted right), 
          *          and the masking ensures it can't attend to padding positions or future positions during training. 
          */        
-        void buildTragetSequence(cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>& tcp, CORPUS& tv, Collective<t>& ts/*, Collective<t>& di*/, Collective<t>& tsm, cc_tokenizer::string_character_traits<char>::size_type mntpl_target = 0, bool verbose = false) throw (ala_exception)
+        void buildTragetSequence(cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>& tcp, CORPUS& tv, Collective<t>& ts/*, Collective<t>& di*/, Collective<t>& tsm, Collective<t>& attentionMaskTargetSequence, cc_tokenizer::string_character_traits<char>::size_type mntpl_target = 0, bool verbose = false) throw (ala_exception)
         {   
             try 
             {
@@ -499,6 +500,11 @@ class Model
              */
             try
             {
+                DIMENSIONSOFARRAY dimesionsOfArrayOfAttentionMaskTargetSequence = attentionMaskTargetSequence.getShape().getDimensionsOfArray();
+                cc_tokenizer::string_character_traits<char>::size_type batch_size = dimesionsOfArrayOfAttentionMaskTargetSequence[0];
+                cc_tokenizer::string_character_traits<char>::size_type number_of_masks = dimesionsOfArrayOfAttentionMaskTargetSequence[1];
+                cc_tokenizer::string_character_traits<char>::size_type size_of_each_mask = dimesionsOfArrayOfAttentionMaskTargetSequence[2];
+
                 for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < tsm.getShape().getDimensionsOfArray().getNumberOfInnerArrays(); i++)                
                 {
                     for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j <= i; j++)
@@ -525,6 +531,44 @@ class Model
                         }
                     }
                 }
+
+                for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < ts.getShape().getN(); i++)
+                {
+                    for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j <= i; j++)
+                    {
+                        if (ts[j] == DECODER_INPUT_BEGINNING_OF_SEQUENCE)
+                        {
+                            attentionMaskTargetSequence[(0*number_of_masks*size_of_each_mask) + i*size_of_each_mask + j] = 1;                            
+                        }
+                        else if (ts[j] == DECODER_INPUT_END_OF_SEQUENCE)
+                        {
+                            attentionMaskTargetSequence[(0*number_of_masks*size_of_each_mask) + i*size_of_each_mask + j] = 1;     
+                        }
+                        else if (ts[j] == DECODER_INPUT_UNKNOWN_VALUE)
+                        {
+                            attentionMaskTargetSequence[(0*number_of_masks*size_of_each_mask) + i*size_of_each_mask + j] = 0; 
+                        }
+                        else if (ts[j] == DECODER_INPUT_PAD_VALUE)
+                        {
+                            attentionMaskTargetSequence[(0*number_of_masks*size_of_each_mask) + i*size_of_each_mask + j] = 0; 
+                        }
+                        else 
+                        { 
+                            attentionMaskTargetSequence[(0*number_of_masks*size_of_each_mask) + i*size_of_each_mask + j] = 1;                        
+                        }
+                    }
+                }
+
+                /*for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < batch_size; i++)
+                {
+                    for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < number_of_masks; j++)
+                    {
+                        for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < size_of_each_mask; k++)
+                        {
+
+                        }
+                    }
+                }*/
             }
             catch (ala_exception& e)
             {
@@ -532,7 +576,7 @@ class Model
             }                        
         }
 
-        void buildDecoderInputFromTargetSequenceAndTargetMask(Collective<t>& di, Collective<t>& ts, Collective<t>& tsm) throw (ala_exception)
+        void buildDecoderInputFromTargetSequenceAndTargetMask(Collective<t>& di, Collective<t>& ts, Collective<t>& tsm, Collective<t>& attentionMaskTargetSequence) throw (ala_exception)
         {               
             DIMENSIONSOFARRAY dima = di.getShape().getDimensionsOfArray();
 
@@ -635,33 +679,27 @@ class Model
                         p = Collective<t>{ptr, DIMENSIONS{1, mntpl_input, NULL, NULL}};*/
                     
                         ptr = cc_tokenizer::allocator<t>().allocate(mntpl_input*dm); 
-
                         memset(ptr, 0, sizeof(t)*mntpl_input*dm);
                         sin_transformed_product = Collective<t>{ptr, DIMENSIONS{dm, mntpl_input, NULL, NULL}};
 
                         ptr = cc_tokenizer::allocator<t>().allocate(mntpl_input*dm); 
-
                         memset(ptr, 0, sizeof(t)*mntpl_input*dm);
                         cos_transformed_product = Collective<t>{ptr, DIMENSIONS{dm, mntpl_input, NULL, NULL}};
                         
                         ptr = cc_tokenizer::allocator<t>().allocate(mntpl_input*W1.getShape().getNumberOfColumns());
-
                         memset (ptr, 0, sizeof(t)*(mntpl_input*W1.getShape().getNumberOfColumns()));
                         is = Collective<t>{ptr, DIMENSIONS{W1.getShape().getNumberOfColumns(), mntpl_input, NULL, NULL}};
 
                         ptr = cc_tokenizer::allocator<t>().allocate(mntpl_input);
-
                         memset(ptr, 0, sizeof(t)*mntpl_input);
                         mask = Collective<t>{ptr, DIMENSIONS{mntpl_input, 1, NULL, NULL}};
 
                         /* Allocate enough memory for scaling term dt and reset it to zeros */
                         ptr = cc_tokenizer::allocator<t>().allocate(dm*mntpl_input);
-
                         memset(ptr, 0, sizeof(t)*dm*mntpl_input);
                         dt = Collective<t>{ptr, DIMENSIONS{dm, mntpl_input, NULL, NULL}};
 
                         ptr = cc_tokenizer::allocator<t>().allocate(mntpl_input*dm); 
-
                         memset(ptr, 0, sizeof(t)*mntpl_input*dm);
                         pe = Collective<t>{ptr, DIMENSIONS{dm, mntpl_input, NULL, NULL}};
                         
@@ -689,12 +727,40 @@ class Model
                          */
                         ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[2] = dm + 1; // d_model + Place to store TOKEN_ID
                         
-                        DIMENSIONSOFARRAY dimensionsOfDecoderInput((cc_tokenizer::string_character_traits<char>::size_type*)ptr, DECODER_INPUT_DIMMENSIONS);
-                        DIMENSIONS decoderInputShape(dimensionsOfDecoderInput);                                            
+                        DIMENSIONSOFARRAY dimensionsOfInput((cc_tokenizer::string_character_traits<char>::size_type*)ptr, DECODER_INPUT_DIMMENSIONS);
+                        DIMENSIONS decoderInputShape(dimensionsOfInput);                                            
                         /*std::cout<< "Decoder Input columns: " << decoderInputShape.getNumberOfColumns() << ", Rows: " << decoderInputShape.getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;*/
                         ptr = cc_tokenizer::allocator<t>().allocate(decoderInputShape.getN());
                         memset(ptr, 0, sizeof(t)*decoderInputShape.getN());                        
                         di = Collective<t>{ptr, decoderInputShape};
+                        /* ************************************************************************************** */
+                        // Experimental mask..... attentionMaskInputSequence
+                        /* ********************************************************************************************************************************* */
+                            ptr = (t*)cc_tokenizer::allocator<cc_tokenizer::string_character_traits<char>::size_type>().allocate(DECODER_INPUT_DIMMENSIONS);
+                            ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[0] = 1; // Batch size
+                            ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[1] = 1; // Number of masks                             
+                            ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[2] = mntpl_input; // Mask length
+                            dimensionsOfInput = DIMENSIONSOFARRAY((cc_tokenizer::string_character_traits<char>::size_type*)ptr, DECODER_INPUT_DIMMENSIONS);
+                            DIMENSIONS attentionMaskShape(dimensionsOfInput);
+                            ptr = cc_tokenizer::allocator<t>().allocate(attentionMaskShape.getN());
+                            memset(ptr, 0, sizeof(t)*attentionMaskShape.getN());
+                            Collective<t> attentionMaskInputSequence(ptr, attentionMaskShape);                            
+                        /* ********************************************************************************************************************************* */
+
+                        /* ************************************************************************************** */
+                        // Experimental mask..... attentionMaskTargetSequence 
+                        /* ********************************************************************************************************************************* */
+                           ptr = (t*)cc_tokenizer::allocator<cc_tokenizer::string_character_traits<char>::size_type>().allocate(DECODER_INPUT_DIMMENSIONS);
+                           ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[0] = 1; // Batch size
+                           ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[1] = mntpl_target + 2; // Number of masks                             
+                           ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[2] = mntpl_target + 2; // Mask length
+                           dimensionsOfInput = DIMENSIONSOFARRAY((cc_tokenizer::string_character_traits<char>::size_type*)ptr, DECODER_INPUT_DIMMENSIONS);
+                           //DIMENSIONS attentionMaskShape(dimensionsOfInput);
+                           attentionMaskShape = DIMENSIONS(dimensionsOfInput);
+                           ptr = cc_tokenizer::allocator<t>().allocate(attentionMaskShape.getN());
+                           memset(ptr, 0, sizeof(t)*attentionMaskShape.getN());
+                           Collective<t> attentionMaskTargetSequence(ptr, attentionMaskShape);
+                        /* ********************************************************************************************************************************* */
                                                                                                                         
                         for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < es; i++)
                         {
@@ -715,7 +781,7 @@ class Model
                                     std::cout << "Status of Forward Pass " << (j + 1) << ", input tokens# "<< icp.get_total_number_of_tokens() << ", target tokens# "<< tcp.get_total_number_of_tokens() << std::endl;
                                 }
 
-                                buildInputSequence(icp, iv, is, mask, W1, !ALLOW_REDUNDANCY);                                
+                                buildInputSequence(icp, iv, is, mask, attentionMaskInputSequence, W1, !ALLOW_REDUNDANCY);                                
 #ifdef MAKE_THIS_MODEL_VERBOSE_FOR_INPUT_SEQUENCE                                
                                 std::cout<< "::: DEBUG DATA -: Model::buildInputSequence() :- :::"  << std::endl;
                                 std::cout<< "Number of tokens in this line: " << icp.get_total_number_of_tokens() << std::endl; 
@@ -738,8 +804,17 @@ class Model
                                         std::cout<< std::endl;
                                     }
                                 }
+                                std::cout<< "attentionMask, Columns: " << attentionMask.getShape().getNumberOfColumns() << ", Rows: " << attentionMask.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
+                                for (int k = 0; k < attentionMask.getShape().getN(); k++)
+                                {
+                                    std::cout<< attentionMask[(k/attentionMask.getShape().getNumberOfColumns())*attentionMask.getShape().getNumberOfColumns() + (k%attentionMask.getShape().getNumberOfColumns())] << " ";
+                                    if ((k + 1)%attentionMask.getShape().getNumberOfColumns() == 0)
+                                    {
+                                        std::cout<< std::endl;
+                                    }
+                                }
 #endif
-                                buildTragetSequence(tcp, tv, ts/*, di*/, tsm, mntpl_target, v);                                
+                                buildTragetSequence(tcp, tv, ts/*, di*/, tsm, attentionMaskTargetSequence, mntpl_target, v);                                
 #ifdef MAKE_THIS_MODEL_VERBOSE_FOR_TARGET_ENCODING                                
                                 std::cout<< "::: DEBUG DATA -: Model::buildTargetSequence() :- :::"  << std::endl;
                                 std::cout<< "ts(Target Sequence), Columns: " << ts.getShape().getNumberOfColumns() << ", Rows: " << ts.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
@@ -767,10 +842,30 @@ class Model
                                         std::cout<< std::endl;
                                     }
                                 }
+                                std::cout<< "attentionMaskTragetSequence(tsm), Batch Size: " << attentionMaskTargetSequence.getShape().getDimensionsOfArray()[0] << ", Number of masks = " << attentionMaskTargetSequence.getShape().getDimensionsOfArray()[1] << ", Size of each mask = " << attentionMaskTargetSequence.getShape().getDimensionsOfArray()[2] << std::endl;
+                                {
+                                    DIMENSIONSOFARRAY dimesionsOfArrayOfAttentionMaskTargetSequence = attentionMaskTargetSequence.getShape().getDimensionsOfArray();
+                                    cc_tokenizer::string_character_traits<char>::size_type batch_size = dimesionsOfArrayOfAttentionMaskTargetSequence[0];
+                                    cc_tokenizer::string_character_traits<char>::size_type number_of_masks = dimesionsOfArrayOfAttentionMaskTargetSequence[1];
+                                    cc_tokenizer::string_character_traits<char>::size_type size_of_each_mask = dimesionsOfArrayOfAttentionMaskTargetSequence[2]; 
+                                    
+                                    for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < batch_size; i++)
+                                    {
+                                        for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < number_of_masks; j++)
+                                        {
+                                            for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < size_of_each_mask; k++)
+                                            {
+                                               std::cout<< attentionMaskTargetSequence[i*number_of_masks*size_of_each_mask + j*size_of_each_mask + k] << " ";
+                                            }                                        
+                                            std::cout<< std::endl;
+                                        }
+                                        std::cout<< std::endl;
+                                    }
+                                }
 #endif
 #ifdef MAKE_THIS_MODEL_VERBOSE_FOR_POSITION_ENCODING                                
 #endif                          
-                                buildPositionEncoding(pe, dt, dm, is, mask, mntpl_input, sin_transformed_product, cos_transformed_product);                                
+                                buildPositionEncoding(pe, dt, dm, is, attentionMaskInputSequence /*mask*/, mntpl_input, sin_transformed_product, cos_transformed_product);                                
 #ifdef MAKE_THIS_MODEL_VERBOSE_FOR_POSITION_ENCODING                                
                                 std::cout<< "::: DEBUG DATA -: (Model::buildPositionEncoding()) for Position Encoding) :- :::"  << std::endl;                                                                                                                                                                
                                 std::cout<< "Transposed(p * mask), Columns: " << p.getShape().getNumberOfColumns() << ", Rows: " << p.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;                                                                
@@ -864,7 +959,7 @@ class Model
                                 }
 #endif                                
                                 Encoder<t> encoder(ei.getShape().getNumberOfColumns(), DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER);                                 
-                                Collective<t> eo = encoder.forward(ei, mask);                                
+                                Collective<t> encoder_output = encoder.forward(ei, mask, attentionMaskInputSequence);                                
                                 /*                                    
                                     In the encoder input, rows (or lines) containing all zeros represent sequences with fewer tokens. 
                                     These rows typically arise due to padding when processing variable-length sequences.
@@ -912,7 +1007,7 @@ class Model
                                           that was originally all zeros remains all zeros throughout the encoding process.
                                         - The following statement explicitly enforces this constraint by applying a masking operation
                                  */
-                                ADHOC_IMPLEMENTATION_OF_MASK_QUERY(eo, mask, true);                                
+                                ADHOC_IMPLEMENTATION_OF_MASK_QUERY(encoder_output, attentionMaskInputSequence /*mask*/, true);                                
 #ifdef MAKE_THIS_MODEL_VERBOSE_FOR_ENCODER_OUTPUT
                                 std::cout<< "::: DEBUG DATA -: Encoder Output(eo) :- :::"  << std::endl;
                                 std::cout<< "Columns: " << eo.getShape().getNumberOfColumns() << ", Rows: " << eo.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
@@ -925,9 +1020,12 @@ class Model
                                         std::cout<< std::endl;
                                     }
                                 }                                
-#endif                                                                
-                                Decoder<t> decoder(eo.getShape().getNumberOfColumns(), DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER);
-                                buildDecoderInputFromTargetSequenceAndTargetMask(di, ts, tsm);
+#endif                          
+                                /*std::cout<< di.getShape().getNumberOfColumns() << std::endl;
+                                std::cout<< encoder_output.getShape().getNumberOfColumns() + 1 << std::endl;
+                                std::cout<< attentionMaskTargetSequence.getShape().getNumberOfColumns() << std::endl;*/                                    
+                                Decoder<t> decoder(di.getShape().getNumberOfColumns() /*encoder_output.getShape().getNumberOfColumns() + 1*/ /*attentionMaskTargetSequence.getShape().getNumberOfColumns()*/, DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER);
+                                buildDecoderInputFromTargetSequenceAndTargetMask(di, ts, tsm, attentionMaskTargetSequence);
 #ifdef MAKE_THIS_MODEL_VERBOSE_FOR_DECODER_INPUT
                                 std::cout<< "::: DEBUG DATA -: Decoder Input(di) :- :::"  << std::endl; 
                                 std::cout<< "Batch Size = " << di.getShape().getDimensionsOfArray()[0] << ", Shifted Right Sequence Length = " << di.getShape().getDimensionsOfArray()[1] << ", TOKEN_ID + d_model = " << di.getShape().getDimensionsOfArray()[2] << std::endl;
@@ -951,8 +1049,7 @@ class Model
                                     }
                                 }
 #endif                                                                                                
-                                decoder.forward(di, eo, tsm, mask);
-
+                                Collective<t> decoder_output = decoder.forward(di, encoder_output, attentionMaskTargetSequence /*tsm*/, attentionMaskInputSequence /*mask*/);
                                 /* *********************************************************************************************************************************************************************************************** */
                                 /* *********************************************************************************************************************************************************************************************** */
                                 /*                                                                      Reinitialize, input sequence and input sequence mask                                                                       */
@@ -960,7 +1057,16 @@ class Model
                                 /*for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < p.getShape().getN(); k++)
                                 {
                                     p[k] = 0;
-                                }*/                                
+                                }*/
+                                                                
+                                for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < attentionMaskInputSequence.getShape().getN(); k++)
+                                {
+                                    attentionMaskInputSequence[k] = 0;                                    
+                                } 
+                                for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < attentionMaskTargetSequence.getShape().getN(); k++)
+                                {
+                                    attentionMaskTargetSequence[k] = 0;                                    
+                                }                                 
                                 for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < sin_transformed_product.getShape().getN(); k++)
                                 {
                                     sin_transformed_product[k] = 0;                                    
