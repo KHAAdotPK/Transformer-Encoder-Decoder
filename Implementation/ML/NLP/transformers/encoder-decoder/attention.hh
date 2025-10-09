@@ -671,7 +671,6 @@ class Attention // Is all you need.
                     std::cout<< std::endl;
                 }
 
-
                 for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < batch_size; j++)
                 {
                     for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < number_of_masks; k++)
@@ -682,7 +681,10 @@ class Attention // Is all you need.
                             {
                                 if ((attentionMask.getShape().getNumberOfRows()/batch_size) == 1)
                                 {
-                                    scores[l*each_mask_size + l] = -1e9;  
+                                    for (cc_tokenizer::string_character_traits<char>::size_type m = 0; m < scores.getShape().getNumberOfColumns(); m++)
+                                    {
+                                        scores[l*scores.getShape().getNumberOfColumns() + m] = -1e9;  
+                                    }
                                 }
                                 else
                                 {
@@ -695,7 +697,6 @@ class Attention // Is all you need.
                         }
                     }
                 }
-
                 
                 /*std::cout<< scores.getShape().getNumberOfColumns() << ", " << scores.getShape().getNumberOfRows() << std::endl;*/
 
