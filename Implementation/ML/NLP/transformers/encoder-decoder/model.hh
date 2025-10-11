@@ -473,7 +473,6 @@ class Model
 
                     if (index != INDEX_NOT_FOUND_AT_VALUE)
                     {   
-
                         // Same thing but just stress testing things here... 
                         ts[i + 1] = tv(tcp.get_token_by_number(i + 1)) /* index */;
                         //std::cout<< "index = " << index << " ";

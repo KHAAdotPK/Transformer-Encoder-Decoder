@@ -54,7 +54,12 @@ public:
     }
 
     // Forward pass method and other details would go here...
-
+    /*
+        @decoder_input: This is the main data flowing through the decoder stack. For the first layer, it's the target sequence embeddings; for subsequent layers, it's the output of the previous DecoderLayer. This is used as the initial Query, Key, and Value for the masked self-attention sub-layer
+        @encoder_output: This is the final output from the entire encoder stack. It's the crucial context from the source sentence. It serves as the Key and Value for the cross-attention sub-layer, while the Query comes from the output of the decoder's self-attention sub-layer
+        @decoder_mask: This is the "look-ahead" mask. It's applied during the masked self-attention step to prevent any token from attending to future tokens in the target sequence, which is essential during training
+        @encoder_mask: This is typically the padding mask from the source sentence. It's used in the cross-attention sub-layer to ensure the decoder doesn't pay attention to padding tokens in the encoder's output
+     */    
     Collective<t> forward(Collective<t>& decoder_input, Collective<t>& encoder_output, Collective<t>& decoder_mask, Collective<t>& encoder_mask)
     {
 
@@ -66,6 +71,7 @@ public:
 
         //masked_self_attention.forward(decoder_input, decoder_input, decoder_input, decoder_mask/*, encoder_mask*/);
 
+        
         masked_self_attention.forward(decoder_input, decoder_input, decoder_input, decoder_mask);
 
         return Collective<t>(NULL, DIMENSIONS{0, 0, NULL, NULL});

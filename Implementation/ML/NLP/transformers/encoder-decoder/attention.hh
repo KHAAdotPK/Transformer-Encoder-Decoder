@@ -574,12 +574,12 @@ class Attention // Is all you need.
                 // V: XW^V, X is the input to the MHA layer(a.k.a ei_value)                
                 value = Numcy::matmul<t>(ei_value, valueWeights); // No scaling for V
 
-                std::cout<< "query = " << query.getShape().getDimensionsOfArray().size() << std::endl;
+                /*std::cout<< "query = " << query.getShape().getDimensionsOfArray().size() << std::endl;
                 std::cout<< "------------>>>> " << query.getShape().getNumberOfColumns() << ", " << query.getShape().getNumberOfRows() << std::endl;
                 std::cout<< "key = " << key.getShape().getDimensionsOfArray().size() << std::endl;
                 std::cout<< "------------>>>> " << key.getShape().getNumberOfColumns() << ", " << key.getShape().getNumberOfRows() << std::endl;
                 std::cout<< "value = " << value.getShape().getDimensionsOfArray().size() << std::endl;
-                std::cout<< "------------>>>> " << value.getShape().getNumberOfColumns() << ", " << value.getShape().getNumberOfRows() << std::endl;
+                std::cout<< "------------>>>> " << value.getShape().getNumberOfColumns() << ", " << value.getShape().getNumberOfRows() << std::endl;*/
 
                 /* I have checked with ADHOC_DEBUG_MACRO for the first run of above three functions their outputs keep the padding rows */
 
@@ -659,9 +659,9 @@ class Attention // Is all you need.
                 scores = Numcy::matmul<t>(query, Numcy::transpose(key)); 
                 static_assert(std::is_same<cc_tokenizer::allocator<double>, cc_tokenizer::allocator<double>>::value, "Double allocator specialization missing");
 
-                std::cout<< "scores = " << scores.getShape().getDimensionsOfArray().size() << std::endl;
-                std::cout<< "------------>>>> " << scores.getShape().getNumberOfColumns() << ", " << scores.getShape().getNumberOfRows() << std::endl;
-                for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < scores.getShape().getNumberOfRows(); i++)
+                /*std::cout<< "scores = " << scores.getShape().getDimensionsOfArray().size() << std::endl;
+                std::cout<< "------------>>>> " << scores.getShape().getNumberOfColumns() << ", " << scores.getShape().getNumberOfRows() << std::endl;*/
+                /*for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < scores.getShape().getNumberOfRows(); i++)
                 {
                     for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < scores.getShape().getNumberOfColumns(); j++)
                     {
@@ -669,7 +669,7 @@ class Attention // Is all you need.
                     }
 
                     std::cout<< std::endl;
-                }
+                }*/
 
                 for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < batch_size; j++)
                 {
