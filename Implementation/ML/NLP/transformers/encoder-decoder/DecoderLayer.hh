@@ -71,8 +71,10 @@ public:
 
         //masked_self_attention.forward(decoder_input, decoder_input, decoder_input, decoder_mask/*, encoder_mask*/);
 
-        
-        masked_self_attention.forward(decoder_input, decoder_input, decoder_input, decoder_mask);
+
+        Collective<t> attention_output = masked_self_attention.forward(decoder_input, decoder_input, decoder_input, decoder_mask);
+
+        decoder_input = decoder_input + attention_output;
 
         return Collective<t>(NULL, DIMENSIONS{0, 0, NULL, NULL});
     }
