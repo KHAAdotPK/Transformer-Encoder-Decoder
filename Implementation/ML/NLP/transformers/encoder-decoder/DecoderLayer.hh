@@ -76,6 +76,12 @@ public:
 
         decoder_input = decoder_input + attention_output;
 
+        Collective<cc_tokenizer::string_character_traits<char>::size_type> temp = Numcy::Random::binomial<t>(20, 1 - this->dropOutRate, decoder_input.getShape() /*DIMENSIONS{1, 1, NULL, NULL}*/);
+
+        temp = temp / (1 - this->dropOutRate);
+
+        /*std::cout<< temp[0] << ", " << temp.getShape().getN() << std::endl;*/
+
         return Collective<t>(NULL, DIMENSIONS{0, 0, NULL, NULL});
     }
 };

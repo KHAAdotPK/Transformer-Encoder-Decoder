@@ -75,8 +75,15 @@
  */
 template <typename t = double>
 class Attention // Is all you need.
-{    
+{   
+    /*
+        In original paper "Attention ia all you need" it is named as d<sub>k</sub>
+     */ 
     cc_tokenizer::string_character_traits<char>::size_type dimensionsOfAttentionHead /* Size of each attention head(in dimensions per head is) d_k = (d_model/num_heads), in other words dimensionsOfAttentionHead is our d_k  */ , dimensionsOfTheModel /* Model dimension (d_model) */, numberOfAttentionHeads /* Number of attention heads */;
+    /*
+        In original paper "Attention ia all you need" it is named as d<sub>v</sub>
+     */
+    cc_tokenizer::string_character_traits<char>::size_type dimensionsOfAttentionHeadV;
 
     /*
         Separate weights:
@@ -86,6 +93,7 @@ class Attention // Is all you need.
     // Projection matrices for Q, K, V (respectively W^Q, W^K, W^V) and "output projection weights" matrix in back propogation it is known as "Wo"
     Collective<t> queryWeights, keyWeights, valueWeights, outputWeights;
     t scaleFactor /* Scaling factor for attention scores */;
+
      
     
     Collective<t> X_ei_query, X_ei_key, X_ei_value; // Input tensors for the attention mechanism (Q, K, V)
@@ -108,7 +116,7 @@ class Attention // Is all you need.
 
     public:
         //  Default constructor
-        Attention(void) : dimensionsOfAttentionHead(floor((t)(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER/DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER))), dimensionsOfTheModel(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER), numberOfAttentionHeads(DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER)
+        Attention(void) : dimensionsOfAttentionHead(floor((t)(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER/DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER))), dimensionsOfAttentionHeadV(floor((t)(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER/DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER))), dimensionsOfTheModel(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER), numberOfAttentionHeads(DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER)
         {   
             /*DIMENSIONS dim3 = {10, 3, NULL, NULL};
             DIMENSIONS dim2 = {0, 10, &dim3, NULL};
@@ -541,6 +549,7 @@ class Attention // Is all you need.
             
             try
             {
+                dimensionsOfAttentionHeadV = floor((t)(ei_value.getShape().getN()/numberOfAttentionHeads));
 
                 /*
                     Use one and only one of the following scaling strategies:

@@ -945,6 +945,33 @@ class Model
                                  */                                
                                 //ei = Numcy::concatenate(pe, is); 
                                 ei = pe + is;
+                                DIMENSIONSOFARRAY ei_new_shape;
+                                ptr = (t*)cc_tokenizer::allocator<cc_tokenizer::string_character_traits<char>::size_type>().allocate(ei.getShape().getNumberOfLinks() + DIMENSIONS_RESHAPE_CONSTANT);                                
+                                ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[0] = 1; // Batch size
+                                ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[1] = ei.getShape().getNumberOfRows();                             
+                                ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[2] = ei.getShape().getNumberOfColumns();
+                                /*std::cout<< "------>>>>>>>> " << ei.getShape().getReferenceCounts()[0] << std::endl;*/
+                                ei_new_shape = DIMENSIONSOFARRAY{(cc_tokenizer::string_character_traits<char>::size_type*)ptr, ei.getShape().getNumberOfLinks() + DIMENSIONS_RESHAPE_CONSTANT, ei.getShape().getReferenceCounts()[0] /*NUMCY_DEFAULT_REFERENCE_COUNT*/};
+
+                                /*for (int i = 0; i < ei_new_shape.size(); i++)
+                                {
+                                    std::cout<< ei_new_shape[i] << " ";
+                                }
+                                std::cout<< std::endl;*/
+
+                                ei.reShape(ei_new_shape);
+
+                                /*std::cout<< "HELLO -> " << ei.getShape(1).getReferenceCounts()[0] << ", Size = " << ei.getShape().getDimensionsOfArray().size() << std::endl;
+
+                                std::cout<< "---------------------------------------------------------------------------------" << std::endl;*/
+
+                                /*ei_new_shape = ei.getShape().getDimensionsOfArray();
+                                for (int i = 0; i < ei_new_shape.size(); i++)
+                                {
+                                    std::cout<< ei_new_shape[i] << " ";
+                                }
+                                std::cout<< std::endl;*/
+                                
 #ifdef MAKE_THIS_MODEL_VERBOSE_FOR_ENCODER_INPUT                                                                
                                 std::cout<< "::: DEBUG DATA -: Encoder Input(ei) :- :::"  << std::endl;
                                 std::cout<< "Columns: " << ei.getShape().getNumberOfColumns() << ", Rows: " << ei.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
@@ -1006,7 +1033,9 @@ class Model
                                           that was originally all zeros remains all zeros throughout the encoding process.
                                         - The following statement explicitly enforces this constraint by applying a masking operation
                                  */
+
                                 ADHOC_IMPLEMENTATION_OF_MASK_QUERY(encoder_output, attentionMaskInputSequence /*mask*/, true);                                
+
 #ifdef MAKE_THIS_MODEL_VERBOSE_FOR_ENCODER_OUTPUT
                                 std::cout<< "::: DEBUG DATA -: Encoder Output(eo) :- :::"  << std::endl;
                                 std::cout<< "Columns: " << eo.getShape().getNumberOfColumns() << ", Rows: " << eo.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;

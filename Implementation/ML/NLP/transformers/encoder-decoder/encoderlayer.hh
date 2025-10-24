@@ -155,6 +155,10 @@ class EncoderLayer
          */       
         Collective<t> forward(Collective<t>& ei, Collective<t>& mask, Collective<t>& attentionMaskInputSequence, ENCODER_LAYER_NORM_POSITION_TYPE norm_position = PreAttentionAndFeedForwardNetwork, bool is_training = true) throw (ala_exception)
         {
+
+            /*std::cout<< "--> " << ei.getShape().getNumberOfColumns() << ", " << ei.getShape().getNumberOfRows() << std::endl;
+            std::cout<< "Floor " << floor((t)(ei.getShape().getN()/DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER)) << std::endl;*/
+
             /*
                 The output of MULTIHEADATTENTION::forward() is typically a transformed representation of the input sequence, where each token's representation has been updated based on attention over all tokens in the sequence. In a Transformer encoder, this output is usually processed further in the following steps:
 
