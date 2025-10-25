@@ -65,6 +65,8 @@ class EncoderLayer
     cc_tokenizer::string_character_traits<char>::size_type dimensionsOfTheModel, numberOfAttentionHeads;
     t dropOutRate;
 
+    MultiHeadAttentionList<t>* multiHeadAttentionListHead;
+
     public:
         //EncoderLayer() : dimensionsOfTheModel(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER), numberOfAttentionHeads(DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER), dropOutRate(DEFAULT_DROP_OUT_RATE_HYPERPARAMETER), attention(), ffn(dimensionsOfTheModel, dropOutRate), norm1(dimensionsOfTheModel), norm2(dimensionsOfTheModel)
         //EncoderLayer() :  attention(), ffn(dimensionsOfTheModel, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER), norm1(dimensionsOfTheModel), norm2(dimensionsOfTheModel), dimensionsOfTheModel(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER), numberOfAttentionHeads(DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER), dropOutRate(DEFAULT_DROP_OUT_RATE_HYPERPARAMETER) 
@@ -80,21 +82,48 @@ class EncoderLayer
             EncoderLayerNormalization::ENCODER_LAYER_NORMALIZATION_EPSILON_VALUE; // Replaces macro, type-safe
         }*/
 
-        EncoderLayer() 
+        EncoderLayer(void) 
             : attention(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER),
               ffn(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER),
               /*norm1*/ attention_norm(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER),
               /*norm2*/ ffn_norm(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER),
               dimensionsOfTheModel(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER),
               numberOfAttentionHeads(DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER),
-              dropOutRate(DEFAULT_DROP_OUT_RATE_HYPERPARAMETER)
+              dropOutRate(DEFAULT_DROP_OUT_RATE_HYPERPARAMETER),
+              multiHeadAttentionListHead(NULL)
         {
             /*
                 Layer Normalization Epsilon Call: The following line doesn’t actually do anything
              */
             EncoderLayerNormalization::ENCODER_LAYER_NORMALIZATION_EPSILON_VALUE; // Replaces macro, type-safe
-        }      
+            
+            MultiHeadAttentionList<t>* current = NULL;
 
+            for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < numberOfAttentionHeads; i++)
+            {
+                if (current == NULL)
+                {                    
+                    current = reinterpret_cast<MultiHeadAttentionList<t>*>(cc_tokenizer::allocator<char>().allocate(sizeof(MultiHeadAttentionList<t>)));
+                    multiHeadAttentionListHead = current;
+                    current->previous = NULL;                    
+                }
+                else
+                {                 
+                    current->next = reinterpret_cast<MultiHeadAttentionList<t>*>(cc_tokenizer::allocator<char>().allocate(sizeof(MultiHeadAttentionList<t>)));
+                    current->next->previous = current;
+                    current = current->next;
+                }
+                
+                current->next = NULL;
+                /*
+                    In a Transformer-based encoder (such as in BERT or GPT-like models), each encoder layer consists of multiple sublayers:
+                    1. Self-Attention Layer, it consists of multiple attention heads 
+                    2. Feedforward Layer
+                    3. Layer Normalization (before or after these)
+                 */    
+                current->ptr = new Attention<t>(dimensionsOfTheModel, numberOfAttentionHeads);     
+            }
+        }      
 
         /*
             @d_model, name from the paper "Attention is all we need" we call it "dimensionsOfTheModel". 
@@ -119,15 +148,41 @@ class EncoderLayer
             @dropout_rate, Dropout rate for regularization. The dropout_rate in the Transformer model is a regularization technique to prevent overfitting.
          */
         EncoderLayer(cc_tokenizer::string_character_traits<char>::size_type d_model, cc_tokenizer::string_character_traits<char>::size_type num_heads, t dropout_rate)
-            : attention(d_model, num_heads),  /* Initialize attention module */
-              ffn(d_model, dropout_rate),     /* Initialize FeedForward Network */
-              /*norm1*/ attention_norm(d_model),                 /* Initialize Layer Normalization 1 */
-              /*norm2*/ ffn_norm(d_model),                 /* Initialize Layer Normalization 2 */
+            : attention(d_model, num_heads),      /* Initialize attention module */
+              ffn(d_model, dropout_rate),         /* Initialize FeedForward Network */
+              /*norm1*/ attention_norm(d_model),  /* Initialize Layer Normalization 1 */
+              /*norm2*/ ffn_norm(d_model),        /* Initialize Layer Normalization 2 */
               dimensionsOfTheModel(d_model), 
               numberOfAttentionHeads(num_heads), 
-              dropOutRate(dropout_rate)
-        { 
+              dropOutRate(dropout_rate),
+              multiHeadAttentionListHead(NULL)
+        {   
+            MultiHeadAttentionList<t>* current = NULL;
 
+            for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < numberOfAttentionHeads; i++)
+            {
+                if (current == NULL)
+                {                    
+                    current = reinterpret_cast<MultiHeadAttentionList<t>*>(cc_tokenizer::allocator<char>().allocate(sizeof(MultiHeadAttentionList<t>)));
+                    multiHeadAttentionListHead = current;
+                    current->previous = NULL;                    
+                }
+                else
+                {                 
+                    current->next = reinterpret_cast<MultiHeadAttentionList<t>*>(cc_tokenizer::allocator<char>().allocate(sizeof(MultiHeadAttentionList<t>)));
+                    current->next->previous = current;
+                    current = current->next;
+                }
+                
+                current->next = NULL;
+                /*
+                    In a Transformer-based encoder (such as in BERT or GPT-like models), each encoder layer consists of multiple sublayers, typically:
+                    1. Self-Attention Layer, it consits of multiple of attention heads
+                    2. Feedforward Layer
+                    3. Layer Normalization (before or after these)
+                 */    
+                current->ptr = new Attention<t>(dimensionsOfTheModel, numberOfAttentionHeads);     
+            }
         }
         
         /**
@@ -249,7 +304,6 @@ class EncoderLayer
                     This helps stabilize the training process and improve convergence.
                     The layer normalization is applied to the output of the attention mechanism.
                  */
-
 
                 if (norm_position == PreAttentionAndFeedForwardNetwork)
                 {
@@ -440,7 +494,27 @@ class EncoderLayer
         }
 
         ~EncoderLayer()
-        {            
+        {
+            if (multiHeadAttentionListHead != NULL)
+            {
+                MultiHeadAttentionList<t>* current = multiHeadAttentionListHead;
+                MultiHeadAttentionList<t>* next;
+                                
+                while (current != NULL)
+                {
+                    next = current->next;
+
+                    /*
+                        The `delete[]` operator is used for deleting arrays allocated with `new[]`.
+                        *(current->ptr) is a single object (not an array), you should use `delete` instead of `delete[]`.
+                     */
+                    delete current->ptr;
+                    current->ptr = NULL;
+
+                    cc_tokenizer::allocator<char>().deallocate(reinterpret_cast<char*>(current), sizeof(MultiHeadAttentionList<t>));
+                    current = next;                    
+                }                                
+            }           
         }
 };
 
