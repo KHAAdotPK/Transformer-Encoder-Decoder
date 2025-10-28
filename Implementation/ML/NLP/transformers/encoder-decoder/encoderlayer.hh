@@ -184,6 +184,52 @@ class EncoderLayer
                 current->ptr = new Attention<t>(dimensionsOfTheModel, numberOfAttentionHeads);     
             }
         }
+
+        Collective<t> forward(Collective<t>& ei, Collective<t>& mask, Collective<t>& attentionMaskInputSequence, ENCODER_LAYER_NORM_POSITION_TYPE norm_position = PreAttentionAndFeedForwardNetwork, bool is_training = true) throw (ala_exception)
+        {   
+            /*                
+             * Each head needs to get a clean slice of the feature dimension. If the number of heads doesn't divide evenly into the feature size, then without padding or adjustments, some heads would end up with fractional features, which isn't valid.
+             * Adding padding or some adjustment/resolution ensures that each head gets equal numbers of features, thus maintaining the integrity of the multi-head attention mechanism.
+             * At the moment, an exception is just being thrown if the number of heads does not divide evenly into the feature size.
+             */           
+            if (ei.getShape().getNumberOfColumns() % numberOfAttentionHeads)
+            {
+                throw ala_exception(cc_tokenizer::String<char>("EncoderLayer<t>::forward(Collective<t>&, Collective<t>&, ENCODER_LAYER_NORM_POSITION_TYPE, bool) Error: The number of columns \"") + cc_tokenizer::String<char>(ei.getShape().getNumberOfColumns()) + cc_tokenizer::String<char>("\" must be evenly divisible by the number of attention heads \"") + cc_tokenizer::String<char>(numberOfAttentionHeads) + cc_tokenizer::String<char>("\" for multi-head attention."));
+            }
+
+            DIMENSIONSOFARRAY dimensionOfArray; 
+            DIMENSIONS dimension;
+            Collective<t> ei_slice;
+
+            try
+            {            
+                dimensionOfArray = ei.getShape().getDimensionsOfArray();
+                dimensionOfArray[dimensionOfArray.size() - 1] = ei.getShape().getNumberOfColumns() / numberOfAttentionHeads;
+                dimension = DIMENSIONS(dimensionOfArray);
+
+                std::cout<< "OK = " << dimension.getNumberOfColumns() << ",  = " << dimension.getN() << std::endl;
+
+                for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < numberOfAttentionHeads; i++)
+                {
+                    ei_slice = ei.slice(i*dimension.getNumberOfColumns(), dimension, AXIS_ROWS);    
+
+                    std::cout<< ei_slice.getShape().getN() << std::endl;
+
+                    std::cout<< ei_slice.getShape().getDimensionsOfArray().size() << std::endl;
+                }
+            }
+            catch (ala_exception& e)
+            {
+                throw ala_exception(cc_tokenizer::String<char>("EncoderLayer<t>::forward(Collective<t>&, Collective<t>&, ENCODER_LAYER_NORM_POSITION_TYPE, bool) Error: ") + e.what());
+            }
+
+            //std::cout<< "Columns = " << ei.getShape().getNumberOfColumns() << ", Rows = " << ei.getShape().getNumberOfRows() << std::endl;
+
+            //std::cout<< ei.getShape().getDimensionsOfArray()[ei.getShape().getDimensionsOfArray().size() - 1] << std::endl;
+            //std::cout<< attentionMaskInputSequence.getShape().getDimensionsOfArray()[attentionMaskInputSequence.getShape().getDimensionsOfArray().size() - 1] << std::endl;
+
+            return Collective<t>{NULL, DIMENSIONS{0, 0, NULL, NULL}};
+        }
         
         /**
          * @brief Forward pass through the Transformer Encoder Layer.
@@ -208,9 +254,8 @@ class EncoderLayer
          *
          * @throws ala_exception    If any internal computation fails or input constraints are violated.
          */       
-        Collective<t> forward(Collective<t>& ei, Collective<t>& mask, Collective<t>& attentionMaskInputSequence, ENCODER_LAYER_NORM_POSITION_TYPE norm_position = PreAttentionAndFeedForwardNetwork, bool is_training = true) throw (ala_exception)
+        Collective<t> forward_old(Collective<t>& ei, Collective<t>& mask, Collective<t>& attentionMaskInputSequence, ENCODER_LAYER_NORM_POSITION_TYPE norm_position = PreAttentionAndFeedForwardNetwork, bool is_training = true) throw (ala_exception)
         {
-
             /*std::cout<< "--> " << ei.getShape().getNumberOfColumns() << ", " << ei.getShape().getNumberOfRows() << std::endl;
             std::cout<< "Floor " << floor((t)(ei.getShape().getN()/DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER)) << std::endl;*/
 
