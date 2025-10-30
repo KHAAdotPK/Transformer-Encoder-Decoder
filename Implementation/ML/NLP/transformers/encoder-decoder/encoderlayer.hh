@@ -197,26 +197,68 @@ class EncoderLayer
                 throw ala_exception(cc_tokenizer::String<char>("EncoderLayer<t>::forward(Collective<t>&, Collective<t>&, ENCODER_LAYER_NORM_POSITION_TYPE, bool) Error: The number of columns \"") + cc_tokenizer::String<char>(ei.getShape().getNumberOfColumns()) + cc_tokenizer::String<char>("\" must be evenly divisible by the number of attention heads \"") + cc_tokenizer::String<char>(numberOfAttentionHeads) + cc_tokenizer::String<char>("\" for multi-head attention."));
             }
 
+            // Pointer to traverse the linked list of attention heads
+            MultiHeadAttentionList<t>* current = multiHeadAttentionListHead;
+
+            // Variables to manage array dimensions and slicing
             DIMENSIONSOFARRAY dimensionOfArray; 
             DIMENSIONS dimension;
-            Collective<t> ei_slice;
+
+            // Collective objects for storing concatenated results and individual slices
+            Collective<t> ei_concatenated, ei_slice;
+            // Counter for tracking slice positions
+            cc_tokenizer::string_character_traits<char>::size_type i = 0;
+
+            // Projection matrices for Q, K, V (respectively W^Q, W^K, W^V) and "output projection weights" matrix in back propogation it is known as "W^O"
+            Collective<t> queryWeights, keyWeights, valueWeights, outputWeights;
 
             try
-            {            
+            {                   
+                // Get the dimensions of the input array 'ei'      
                 dimensionOfArray = ei.getShape().getDimensionsOfArray();
-                dimensionOfArray[dimensionOfArray.size() - 1] = ei.getShape().getNumberOfColumns() / numberOfAttentionHeads;
+
+                // Modify the last dimension to split across attention heads
+                // Divide the column dimension by number of attention heads for equal partitioning
+                dimensionOfArray[dimensionOfArray.size() - 1] = ei.getShape().getNumberOfColumns() / numberOfAttentionHeads;                
+                // Create dimension object with modified dimensions for slicing
                 dimension = DIMENSIONS(dimensionOfArray);
 
-                std::cout<< "OK = " << dimension.getNumberOfColumns() << ",  = " << dimension.getN() << std::endl;
+                //std::cout<< "OK = " << dimension.getNumberOfColumns() << ",  = " << dimension.getN() << std::endl;
 
-                for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < numberOfAttentionHeads; i++)
+                // Iterate through all MultiHeadAttention modules in the linked list
+                while (current != NULL)
+                {   
+                    // Extract a slice from input 'ei' starting at calculated position
+                    // Each slice corresponds to one attention head's portion of the input                 
+                    ei_slice = ei.slice(i*dimension.getNumberOfColumns(), dimension, AXIS_ROWS);
+
+                    // Concatenate the current slice with previous slices along columns
+                    // This builds up the complete processed output across all attention heads
+                    ei_concatenated = Numcy::concatenate(ei_concatenated, ei_slice, AXIS_COLUMN);
+
+                    // Increment slice counter and move to next attention head
+                    i = i + 1;
+                    current = current->next;                                        
+                }
+
+                std::cout<< "Concatenated OK = " << ei_concatenated.getShape().getNumberOfColumns() << ",  = " << ei_concatenated.getShape().getNumberOfRows() << std::endl;
+
+                /*for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < ei.getShape().getN(); k++)
+                {
+                    if (ei_concatenated[k] == ei[k])
+                    {
+                        std::cout<< "Mismatch at index " << k << ": ei_concatenated = " << ei_concatenated[k] << ", ei = " << ei[k] << std::endl;
+                    }
+                }*/
+
+                /*for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < numberOfAttentionHeads; i++)
                 {
                     ei_slice = ei.slice(i*dimension.getNumberOfColumns(), dimension, AXIS_ROWS);    
 
                     std::cout<< ei_slice.getShape().getN() << std::endl;
 
                     std::cout<< ei_slice.getShape().getDimensionsOfArray().size() << std::endl;
-                }
+                }*/
             }
             catch (ala_exception& e)
             {
@@ -228,7 +270,9 @@ class EncoderLayer
             //std::cout<< ei.getShape().getDimensionsOfArray()[ei.getShape().getDimensionsOfArray().size() - 1] << std::endl;
             //std::cout<< attentionMaskInputSequence.getShape().getDimensionsOfArray()[attentionMaskInputSequence.getShape().getDimensionsOfArray().size() - 1] << std::endl;
 
-            return Collective<t>{NULL, DIMENSIONS{0, 0, NULL, NULL}};
+            //return Collective<t>{NULL, DIMENSIONS{0, 0, NULL, NULL}};
+
+            return ei_concatenated;
         }
         
         /**
