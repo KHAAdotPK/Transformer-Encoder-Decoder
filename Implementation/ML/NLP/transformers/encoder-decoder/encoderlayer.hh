@@ -67,6 +67,9 @@ class EncoderLayer
 
     MultiHeadAttentionList<t>* multiHeadAttentionListHead;
 
+    // Projection matrices for Q, K, V (respectively W^Q, W^K, W^V) and "output projection weights" matrix in back propogation it is known as "W^O"
+    Collective<t> queryWeights, keyWeights, valueWeights, outputWeights;
+
     public:
         //EncoderLayer() : dimensionsOfTheModel(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER), numberOfAttentionHeads(DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER), dropOutRate(DEFAULT_DROP_OUT_RATE_HYPERPARAMETER), attention(), ffn(dimensionsOfTheModel, dropOutRate), norm1(dimensionsOfTheModel), norm2(dimensionsOfTheModel)
         //EncoderLayer() :  attention(), ffn(dimensionsOfTheModel, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER), norm1(dimensionsOfTheModel), norm2(dimensionsOfTheModel), dimensionsOfTheModel(DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER), numberOfAttentionHeads(DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER), dropOutRate(DEFAULT_DROP_OUT_RATE_HYPERPARAMETER) 
@@ -190,11 +193,19 @@ class EncoderLayer
             /*                
              * Each head needs to get a clean slice of the feature dimension. If the number of heads doesn't divide evenly into the feature size, then without padding or adjustments, some heads would end up with fractional features, which isn't valid.
              * Adding padding or some adjustment/resolution ensures that each head gets equal numbers of features, thus maintaining the integrity of the multi-head attention mechanism.
-             * At the moment, an exception is just being thrown if the number of heads does not divide evenly into the feature size.
+             * At the moment, an exception is just being thrown if the number of heads does not divide evenly into the feature size
              */           
             if (ei.getShape().getNumberOfColumns() % numberOfAttentionHeads)
             {
                 throw ala_exception(cc_tokenizer::String<char>("EncoderLayer<t>::forward(Collective<t>&, Collective<t>&, ENCODER_LAYER_NORM_POSITION_TYPE, bool) Error: The number of columns \"") + cc_tokenizer::String<char>(ei.getShape().getNumberOfColumns()) + cc_tokenizer::String<char>("\" must be evenly divisible by the number of attention heads \"") + cc_tokenizer::String<char>(numberOfAttentionHeads) + cc_tokenizer::String<char>("\" for multi-head attention."));
+            }
+
+            /*
+             * Ensure the input feature dimension matches the model's expected dimension
+             */
+            if (ei.getShape().getNumberOfColumns() != dimensionsOfTheModel)
+            {
+                throw ala_exception(cc_tokenizer::String<char>("EncoderLayer<t>::forward(Collective<t>&, Collective<t>&, ENCODER_LAYER_NORM_POSITION_TYPE, bool) Error: The number of input columns  \"") + cc_tokenizer::String<char>(ei.getShape().getNumberOfColumns()) + cc_tokenizer::String<char>("\" must be equal to the model dimension \"") + cc_tokenizer::String<char>(dimensionsOfTheModel) + cc_tokenizer::String<char>("\"."));
             }
 
             // Pointer to traverse the linked list of attention heads
@@ -202,45 +213,85 @@ class EncoderLayer
 
             // Variables to manage array dimensions and slicing
             DIMENSIONSOFARRAY dimensionOfArray; 
-            DIMENSIONS dimension;
+            DIMENSIONS dimension_ei_slice, dimension_qkv_weights, dimension_qkv_slice;
 
             // Collective objects for storing concatenated results and individual slices
-            Collective<t> ei_concatenated, ei_slice;
+            Collective<t> ei_concatenated, ei_slice, q_slice, k_slice, v_slice;
             // Counter for tracking slice positions
             cc_tokenizer::string_character_traits<char>::size_type i = 0;
 
             // Projection matrices for Q, K, V (respectively W^Q, W^K, W^V) and "output projection weights" matrix in back propogation it is known as "W^O"
-            Collective<t> queryWeights, keyWeights, valueWeights, outputWeights;
+            Collective<t> queryWeights, keyWeights, valueWeights, outputWeights; // In the original paper "output projection weights" has same shape as the other three weight matrices.
+                                                                                 // In reality "output projection weights" should have the same shape projection weights for value input because these weights are multiplied with the output of product between attention scores and value weights
 
             try
             {                   
                 // Get the dimensions of the input array 'ei'      
                 dimensionOfArray = ei.getShape().getDimensionsOfArray();
 
-                // Modify the last dimension to split across attention heads
-                // Divide the column dimension by number of attention heads for equal partitioning
-                dimensionOfArray[dimensionOfArray.size() - 1] = ei.getShape().getNumberOfColumns() / numberOfAttentionHeads;                
-                // Create dimension object with modified dimensions for slicing
-                dimension = DIMENSIONS(dimensionOfArray);
+                /* 
+                 * Divide the input 'ei' into equal slices for each attention head.
+                 * Modify the last dimension to split across attention heads.
+                 * Divide the column dimension by number of attention heads for equal partitioning
+                 */ 
+                dimensionOfArray[dimensionOfArray.size() - 1] = ei.getShape().getNumberOfColumns() / numberOfAttentionHeads; // h in original paper                
+                // Create dimension object with modified dimensions for slicing of 'ei' a.k.a encoder input
+                dimension_ei_slice = DIMENSIONS(dimensionOfArray);
 
                 //std::cout<< "OK = " << dimension.getNumberOfColumns() << ",  = " << dimension.getN() << std::endl;
 
-                // Iterate through all MultiHeadAttention modules in the linked list
+                // Initialize weight matrices if they haven't been initialized yet
+                // This lazy initialization creates the Q, K, V projection weights on first use
+                if (queryWeights.getShape().getN() == 0 && keyWeights.getShape().getN() == 0 && valueWeights.getShape().getN() == 0 /*&& outputWeights.getShape().getN() == 0*/)
+                {
+                    // Set dimensions for full weight matrices (model_dim x model_dim)
+                    dimensionOfArray[dimensionOfArray.size() - 1] = dimensionsOfTheModel; // d_model in original paper, ei.getShape().getNumberOfColumns();
+                    dimensionOfArray[dimensionOfArray.size() - 2] = dimensionsOfTheModel; // d_model in original paper, ei.getShape().getNumberOfRows();
+                    dimension_qkv_weights = DIMENSIONS(dimensionOfArray);
+ 
+                    // Initialize Q, K, V weight matrices with random values
+                    queryWeights = Numcy::Random::randn<t>(dimension_qkv_weights);
+                    keyWeights = Numcy::Random::randn<t>(dimension_qkv_weights); 
+                    valueWeights = Numcy::Random::randn<t>(dimension_qkv_weights); // Value weights can have fewer or more fetures than input features
+                    
+                    // Set dimensions for sliced weight matrices (per attention head)
+                    dimensionOfArray[dimensionOfArray.size() - 1] = dimensionsOfTheModel / numberOfAttentionHeads; // d_q, d_k, d_v. d_q and d_k are interchangeable but d_v can be different.
+                                                                                                                   // In the original paper, you would see d_k, d_k where d_q, d_k would have been used.  
+                    dimension_qkv_slice = DIMENSIONS(dimensionOfArray);
+                }
+                
+                // Iterate through all MultiHeadAttention modules in the linked list                
                 while (current != NULL)
                 {   
+                    // AXIS_ROWS means we are slicing along rows
+                    // -----------------------------------------
                     // Extract a slice from input 'ei' starting at calculated position
-                    // Each slice corresponds to one attention head's portion of the input                 
-                    ei_slice = ei.slice(i*dimension.getNumberOfColumns(), dimension, AXIS_ROWS);
+                    // Each slice corresponds to one attention head's portion of the input                     
+                    ei_slice = ei.slice(i*dimension_ei_slice.getNumberOfColumns(), dimension_ei_slice, AXIS_ROWS);
 
+                    // Extract corresponding slices from Q, K, V weight matrices for this attention head
+                    q_slice = queryWeights.slice(i*dimension_qkv_slice.getNumberOfColumns(), dimension_qkv_slice, AXIS_ROWS);
+                    k_slice = keyWeights.slice(i*dimension_qkv_slice.getNumberOfColumns(), dimension_qkv_slice, AXIS_ROWS);
+                    v_slice = valueWeights.slice(i*dimension_qkv_slice.getNumberOfColumns(), dimension_qkv_slice, AXIS_ROWS);    
+
+                    // AXIS_COLUMN means we are concatenating horizontally (along columns)
+                    // -------------------------------------------------------------------
                     // Concatenate the current slice with previous slices along columns
-                    // This builds up the complete processed output across all attention heads
+                    // This builds up the complete processed output across all attention heads                    
                     ei_concatenated = Numcy::concatenate(ei_concatenated, ei_slice, AXIS_COLUMN);
 
+                    // Update the weight matrices with the sliced portions
+                    // This distributes different parts of the weight matrices to different attention heads
+                    queryWeights.update(i*dimension_qkv_slice.getNumberOfColumns(), q_slice, AXIS_ROWS);
+                    keyWeights.update(i*dimension_qkv_slice.getNumberOfColumns(), k_slice, AXIS_ROWS);
+                    valueWeights.update(i*dimension_qkv_slice.getNumberOfColumns(), v_slice, AXIS_ROWS);
+                                        
                     // Increment slice counter and move to next attention head
                     i = i + 1;
                     current = current->next;                                        
                 }
 
+                // Debug output to verify concatenated dimensions
                 std::cout<< "Concatenated OK = " << ei_concatenated.getShape().getNumberOfColumns() << ",  = " << ei_concatenated.getShape().getNumberOfRows() << std::endl;
 
                 /*for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < ei.getShape().getN(); k++)
@@ -272,6 +323,7 @@ class EncoderLayer
 
             //return Collective<t>{NULL, DIMENSIONS{0, 0, NULL, NULL}};
 
+            // Return the concatenated result from all attention heads
             return ei_concatenated;
         }
         
