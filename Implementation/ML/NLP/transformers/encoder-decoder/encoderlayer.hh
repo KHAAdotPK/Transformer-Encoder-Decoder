@@ -253,6 +253,12 @@ class EncoderLayer
                     queryWeights = Numcy::Random::randn<t>(dimension_qkv_weights);
                     keyWeights = Numcy::Random::randn<t>(dimension_qkv_weights); 
                     valueWeights = Numcy::Random::randn<t>(dimension_qkv_weights); // Value weights can have fewer or more fetures than input features
+ 
+                    // Output projection weights
+                    // W<sup>O</sup> has shape d_model$×$(d<sub>v</sub>·h)
+                    // Since W<sup>V</sup> shape is no different than the other two projection weights (W<sup>Q</sup>, W<sup>K</sup>), the shape of W<sup>O</sup> will be same as W<sup>V</sup>
+                    // We will not work on slices of these weights. This will be used as a right operand in a dot product operation, the other operand is concatenation of output of all (h many) attention heads
+                    outputWeights = Numcy::Random::randn(dimension_qkv_weights);
                     
                     // Set dimensions for sliced weight matrices (per attention head)
                     dimensionOfArray[dimensionOfArray.size() - 1] = dimensionsOfTheModel / numberOfAttentionHeads; // d_q, d_k, d_v. d_q and d_k are interchangeable but d_v can be different.
