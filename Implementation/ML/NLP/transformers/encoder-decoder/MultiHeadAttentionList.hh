@@ -71,7 +71,7 @@ struct MultiHeadAttentionList
     class Attention<t>* ptr; 
 
     struct MultiHeadAttentionList<t>* next;
-    struct MultiHeadAttentionList<t>* previous;
+    struct MultiHeadAttentionList<t>* previous;    
 };
 
 #endif

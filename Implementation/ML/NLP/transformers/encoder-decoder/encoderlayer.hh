@@ -188,7 +188,7 @@ class EncoderLayer
             }
         }
 
-        Collective<t> forward(Collective<t>& ei, Collective<t>& mask, Collective<t>& attentionMaskInputSequence, ENCODER_LAYER_NORM_POSITION_TYPE norm_position = PreAttentionAndFeedForwardNetwork, bool is_training = true) throw (ala_exception)
+        Collective<t> forward(Collective<t>& ei/*, Collective<t>& mask*/, Collective<t>& attentionMaskInputSequence, ENCODER_LAYER_NORM_POSITION_TYPE norm_position = PreAttentionAndFeedForwardNetwork, bool is_training = true) throw (ala_exception)
         {   
             /*                
              * Each head needs to get a clean slice of the feature dimension. If the number of heads doesn't divide evenly into the feature size, then without padding or adjustments, some heads would end up with fractional features, which isn't valid.
@@ -213,16 +213,18 @@ class EncoderLayer
 
             // Variables to manage array dimensions and slicing
             DIMENSIONSOFARRAY dimensionOfArray; 
-            DIMENSIONS dimension_ei_slice, dimension_qkv_weights, dimension_qkv_slice;
+            DIMENSIONS /*dimension_ei_slice,*/ dimension_qkv_weights, dimension_qkv_slice;
 
             // Collective objects for storing concatenated results and individual slices
-            Collective<t> ei_concatenated, ei_slice, q_slice, k_slice, v_slice;
+            Collective<t> ei_concatenated/*, ei_slice*/, q_slice, k_slice, v_slice;
             // Counter for tracking slice positions
             cc_tokenizer::string_character_traits<char>::size_type i = 0;
 
             // Projection matrices for Q, K, V (respectively W^Q, W^K, W^V) and "output projection weights" matrix in back propogation it is known as "W^O"
             Collective<t> queryWeights, keyWeights, valueWeights, outputWeights; // In the original paper "output projection weights" has same shape as the other three weight matrices.
                                                                                  // In reality "output projection weights" should have the same shape projection weights for value input because these weights are multiplied with the output of product between attention scores and value weights
+
+            Collective<t> attention_head_output, attention_head_outputs;
 
             try
             {                   
@@ -234,14 +236,16 @@ class EncoderLayer
                  * Modify the last dimension to split across attention heads.
                  * Divide the column dimension by number of attention heads for equal partitioning
                  */ 
-                dimensionOfArray[dimensionOfArray.size() - 1] = ei.getShape().getNumberOfColumns() / numberOfAttentionHeads; // h in original paper                
+                    /*dimensionOfArray[dimensionOfArray.size() - 1] = ei.getShape().getNumberOfColumns() / numberOfAttentionHeads; // h in original paper*/                
                 // Create dimension object with modified dimensions for slicing of 'ei' a.k.a encoder input
-                dimension_ei_slice = DIMENSIONS(dimensionOfArray);
+                    /*dimension_ei_slice = DIMENSIONS(dimensionOfArray);*/
 
                 //std::cout<< "OK = " << dimension.getNumberOfColumns() << ",  = " << dimension.getN() << std::endl;
 
-                // Initialize weight matrices if they haven't been initialized yet
-                // This lazy initialization creates the Q, K, V projection weights on first use
+                /*
+                 * Initialize weight matrices if they haven't been initialized yet
+                 * This lazy initialization creates the Q, K, V projection weights on first use
+                 */
                 if (queryWeights.getShape().getN() == 0 && keyWeights.getShape().getN() == 0 && valueWeights.getShape().getN() == 0 /*&& outputWeights.getShape().getN() == 0*/)
                 {
                     // Set dimensions for full weight matrices (model_dim x model_dim)
@@ -254,10 +258,12 @@ class EncoderLayer
                     keyWeights = Numcy::Random::randn<t>(dimension_qkv_weights); 
                     valueWeights = Numcy::Random::randn<t>(dimension_qkv_weights); // Value weights can have fewer or more fetures than input features
  
-                    // Output projection weights
-                    // W<sup>O</sup> has shape d_model$×$(d<sub>v</sub>·h)
-                    // Since W<sup>V</sup> shape is no different than the other two projection weights (W<sup>Q</sup>, W<sup>K</sup>), the shape of W<sup>O</sup> will be same as W<sup>V</sup>
-                    // We will not work on slices of these weights. This will be used as a right operand in a dot product operation, the other operand is concatenation of output of all (h many) attention heads
+                    /*
+                     * Output projection weights
+                     * W<sup>O</sup> has shape d_model$×$(d<sub>v</sub>·h)
+                     * Since W<sup>V</sup> shape is no different than the other two projection weights (W<sup>Q</sup>, W<sup>K</sup>), the shape of W<sup>O</sup> will be same as W<sup>V</sup>
+                     * We will not work on slices of these weights. This will be used as a right operand in a dot product operation, the other operand is concatenation of output of all (h many) attention heads
+                     */
                     outputWeights = Numcy::Random::randn(dimension_qkv_weights);
                     
                     // Set dimensions for sliced weight matrices (per attention head)
@@ -269,23 +275,48 @@ class EncoderLayer
                 // Iterate through all MultiHeadAttention modules in the linked list                
                 while (current != NULL)
                 {   
-                    // AXIS_ROWS means we are slicing along rows
-                    // -----------------------------------------
+                    // AXIS_ROWS means we are slicing along and across rows vertically
+                    // ---------------------------------------------------------------
                     // Extract a slice from input 'ei' starting at calculated position
                     // Each slice corresponds to one attention head's portion of the input                     
-                    ei_slice = ei.slice(i*dimension_ei_slice.getNumberOfColumns(), dimension_ei_slice, AXIS_ROWS);
+                            /*ei_slice = ei.slice(i*dimension_ei_slice.getNumberOfColumns(), dimension_ei_slice, AXIS_ROWS);*/
 
                     // Extract corresponding slices from Q, K, V weight matrices for this attention head
                     q_slice = queryWeights.slice(i*dimension_qkv_slice.getNumberOfColumns(), dimension_qkv_slice, AXIS_ROWS);
                     k_slice = keyWeights.slice(i*dimension_qkv_slice.getNumberOfColumns(), dimension_qkv_slice, AXIS_ROWS);
-                    v_slice = valueWeights.slice(i*dimension_qkv_slice.getNumberOfColumns(), dimension_qkv_slice, AXIS_ROWS);    
+                    v_slice = valueWeights.slice(i*dimension_qkv_slice.getNumberOfColumns(), dimension_qkv_slice, AXIS_ROWS); 
+                    
+                    // AXIS_COLUMN means we are concatenating horizontally (along columns)
+                    // -------------------------------------------------------------------
+                    attention_head_output = MultiHeadAttention<t>::worker(ei, ei, ei, q_slice, k_slice, v_slice);
+
+                    //std::cout<< "attention_head_ouput OK = " << attention_head_output.getShape().getNumberOfColumns() << ",  = " << attention_head_output.getShape().getNumberOfRows() << std::endl;
+
+                    // AXIS_COLUMN means we are concatenating horizontally (along columns)
+                    // -------------------------------------------------------------------
+                    /*
+                     * Concatenate individual attention head outputs along feature dimension
+                     *
+                     * Each attention head produces context vectors of shape (sequence_length × d_v)
+                     * By concatenating along columns (feature axis), we combine the outputs from
+                     * all h attention heads into a unified representation:
+                     *
+                     * Result shape: (sequence_length × h·d_v)
+                     *
+                     * This concatenated output preserves the diverse contextual information
+                     * captured by each attention head, maintaining their unique specialized
+                     * representations before the final linear projection.
+                     */
+                    attention_head_outputs = Numcy::concatenate(attention_head_outputs, attention_head_output, AXIS_COLUMN);
 
                     // AXIS_COLUMN means we are concatenating horizontally (along columns)
                     // -------------------------------------------------------------------
                     // Concatenate the current slice with previous slices along columns
                     // This builds up the complete processed output across all attention heads                    
-                    ei_concatenated = Numcy::concatenate(ei_concatenated, ei_slice, AXIS_COLUMN);
-
+                            /*ei_concatenated = Numcy::concatenate(ei_concatenated, ei_slice, AXIS_COLUMN);*/
+                    
+                    // AXIS_ROWS means we are slicing along and across rows vertically
+                    // ---------------------------------------------------------------
                     // Update the weight matrices with the sliced portions
                     // This distributes different parts of the weight matrices to different attention heads
                     queryWeights.update(i*dimension_qkv_slice.getNumberOfColumns(), q_slice, AXIS_ROWS);
@@ -298,7 +329,8 @@ class EncoderLayer
                 }
 
                 // Debug output to verify concatenated dimensions
-                std::cout<< "Concatenated OK = " << ei_concatenated.getShape().getNumberOfColumns() << ",  = " << ei_concatenated.getShape().getNumberOfRows() << std::endl;
+                /*std::cout<< "Concatenated OK = " << ei_concatenated.getShape().getNumberOfColumns() << ",  = " << ei_concatenated.getShape().getNumberOfRows() << std::endl;*/                
+                /*std::cout<< "attention_head_ouputs OK = " << attention_head_outputs.getShape().getNumberOfColumns() << ",  = " << attention_head_outputs.getShape().getNumberOfRows() << std::endl;*/
 
                 /*for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < ei.getShape().getN(); k++)
                 {
@@ -330,7 +362,7 @@ class EncoderLayer
             //return Collective<t>{NULL, DIMENSIONS{0, 0, NULL, NULL}};
 
             // Return the concatenated result from all attention heads
-            return ei_concatenated;
+            return /*ei_concatenated*/ attention_head_outputs;
         }
         
         /**

@@ -369,6 +369,7 @@ typedef enum { PreAttentionAndFeedForwardNetwork, PostAttentionAndFeedForwardNet
 #include "./hyperparameters.hh"
 #include "./attention.hh"
 #include "./MultiHeadAttentionList.hh"
+#include "./MultiHeadAttention.hh"
 #include "./EncoderFeedForwardNetwork.hh"
 #include "./EncoderLayerNormalization.hh"
 #include "./EncoderLayerList.hh"

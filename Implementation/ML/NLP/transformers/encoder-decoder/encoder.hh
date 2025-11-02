@@ -123,7 +123,7 @@ class Encoder
                     2. The output is then passed through Layer Normalization (EncoderLayerNormalization)
                     3. The final output of the encoder layer is then sent to the next encoder layer (or decoder)
                  */
-                output = current->ptr->forward(output, mask, attentionMaskInputSequence);
+                output = current->ptr->forward(output/*, mask*/, attentionMaskInputSequence);
 
                 current = current->next;                    
             }
