@@ -184,6 +184,8 @@ msbuild project.xml /p:BuildPositionEncodingVerbose=yes
 usage/RUN.cmd build verbose_pe
 ```
 
+### Implementation: Sinusoidal Position Encoding in C++
+
 ```C++
 /**
  * @brief Constructs position encoding for a batch of input sequences using sinusoidal encoding.
@@ -366,3 +368,13 @@ void buildPositionEncoding(Collective<t>& pe, Collective<t>& dt, cc_tokenizer::s
     }
 }
 ```
+---
+
+## License
+
+Copyright (c) 2025 Sohail Qayum Malik
+
+This documentation is part of the [MachineLearning](https://github.com/KHAAdotPK/MachineLearning) repository and is licensed under the same terms as the repository's [LICENSE](LICENSE) file.
+
+
+

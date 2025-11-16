@@ -268,3 +268,10 @@ void buildInputSequence(cc_tokenizer::csv_parser<cc_tokenizer::String<char>, cha
     }
 }
 ```
+---
+
+## License
+
+Copyright (c) 2025 Sohail Qayum Malik
+
+This documentation is part of the [MachineLearning](https://github.com/KHAAdotPK/MachineLearning) repository and is licensed under the same terms as the repository's [LICENSE](LICENSE) file.
