@@ -61,24 +61,27 @@ class Model
          * using pre-trained word embeddings.
          * 
          * Parameters:
-         * @is    - An output parameter of type Collective<t> that will store the final input sequence.
-         * @v     - Vocabulary object that maps tokens to indices
-         * @icp   - Input CSV parser object representing the input corpus, which provides token-related information.
-         * @mntpl_input - Each input sequence is padded to ensure uniform length across variable-length sequences per line. 
-         *          The value of maximum number of tokens/sequences per line (mntpl_input) determines the size of all input sequences. 
-         *          If an input line has fewer tokens, padding is added to match the required length.              
-         * @mask  - Padding tokens should not receive valid position encodings because they do not contribute to the model’s 
-         *          understanding of sequence structure(padding tokens are added to make all input sequences 
-         *          uniform in length). 
-         *          Since positional encodings influence attention weights, allowing padding tokens to have meaningful encodings
-         *          might lead to misleading attention patterns.
-         *          You need a mask that differentiates real tokens from padding tokens. The mask should have:
-         *          Value (DEFAULT_VALID_WORD_VECTOR_MASK_VALUE) for real tokens (to keep their positional encoding).
-         *          Value (DEFAULT_PADDING_WORD_VECTOR_VALUE) for padding tokens (to zero out their positional encoding).
-         * @t     - The data type of embeddings (e.g., float, double).
-         * @w1    - Matrix of pre-trained word embeddings where each row represents a word vector.
-         * @redundancy - Optional parameter that allows for multiple occurrences of the same token in the vocabulary.
-         * @v    - Optional parameter that enables verbose output for debugging purposes.
+         * @is             - An output parameter of type Collective<t> that will store the final input sequence.
+         * @v              - Vocabulary object that maps tokens to indices
+         * @icp            - Input CSV parser object representing the input corpus, which provides token-related information.
+         * @mntpl_input    - Each input sequence is padded to ensure uniform length across variable-length sequences per line. 
+         *                   The value of maximum number of tokens/sequences per line (mntpl_input) determines the size of all input sequences. 
+         *                   If an input line has fewer tokens, padding is added to match the required length.              
+         * @attentionMask  - Padding tokens should not receive valid position encodings because they do not contribute to the model’s 
+         *                   understanding of sequence structure(padding tokens are added to make all input sequences 
+         *                   uniform in length). 
+         *                   Since positional encodings influence attention weights, allowing padding tokens to have meaningful encodings
+         *                   might lead to misleading attention patterns.
+         *                   You need a mask that differentiates real tokens from padding tokens. The mask should have:
+         *                   Value (DEFAULT_VALID_WORD_VECTOR_MASK_VALUE) for real tokens (to keep their positional encoding).
+         *                   Value (DEFAULT_PADDING_WORD_VECTOR_VALUE) for padding tokens (to zero out their positional encoding).
+         *                   - attentionMask.getShape().getDimensionsOfArray()[0]  // Batch size
+         *                   - attentionMask.getShape().getDimensionsOfArray()[1]  // Number of masks                             
+         *                   - attentionMask.getShape().getDimensionsOfArray()[2]  // Mask length
+         * @t              - The data type of embeddings (e.g., float, double).
+         * @w1             - Matrix of pre-trained word embeddings where each row represents a word vector.
+         * @redundancy     - Optional parameter that allows for multiple occurrences of the same token in the vocabulary.
+         * @v              - Optional parameter that enables verbose output for debugging purposes.
          * 
          * Implementation:
          * 1. Allocates memory for all tokens * embedding dimension in the current line
@@ -93,56 +96,80 @@ class Model
          *    - Finally, the mask is wrapped in a `Collective<t>` object for use in downstream processing.
          *    (PLEASE NOTE:-  Implementation can ignore trailing padding, example: If all sequences are mntpl_input=10, but only the first 7 positions contain valid tokens, you can use sequence_length=7 instead of a mask.) 
          * 
-         * Error Handling:
-         * - Handles memory allocation failures (bad_alloc)
-         * - Handles length errors
-         * - Handles custom ala_exceptions
+         * Error Handling:         
+         * - Handles indexing errors         
          * - All errors are propagated with additional context
          *  
          * Note: The Vocabulary object uses internal indexing that starts at INDEX_ORIGINATES_AT_VALUE.
          *       In contrast, word embeddings use zero-based indexing (starting at 0).
          */    
-        void buildInputSequence(cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>& icp, CORPUS& iv, Collective<t>& is, Collective<t>& mask, Collective<t>& attentionMask, Collective<t>& W1, bool redundancy = ALLOW_REDUNDANCY, bool v = false) throw (ala_exception)
+        void buildInputSequence(cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>& icp, CORPUS& iv, Collective<t>& is, Collective<t>& attentionMask, Collective<t>& W1, bool redundancy = ALLOW_REDUNDANCY, bool v = false) throw (ala_exception)
         {                                                                                                                                            
             try
-            {                           
-                for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < icp.get_total_number_of_tokens(); i++)
+            {   
+                for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < attentionMask.getShape().getDimensionsOfArray()[0]; i++)
                 {
-                    /* Get the index of the token in the vocabulary. These indices originate at INDEX_ORIGINATE_AT_VALUE */
-                    cc_tokenizer::string_character_traits<char>::size_type index = iv(icp.get_token_by_number(i + 1), icp.get_current_line_number(), i + 1, redundancy);
-                    
-                    /* If this condition is false, we are no longer strictly using post-padding; instead, padding tokens may appear */
-                    /* between valid tokens, leading to mixed padding. */
-                    /* TODO: Investigate whether the following statement can ever evaluate to be false, because under that circumstances */
-                    /* mixed padding might occur. */
-                    if (index != INDEX_NOT_FOUND_AT_VALUE)
-                    {
-                        /* Marking real tokens with a valid mask value */
-                        mask[i] = DEFAULT_VALID_WORD_VECTOR_MASK_VALUE;
-                        attentionMask[i] = DEFAULT_VALID_WORD_VECTOR_MASK_VALUE;
-            
-                        /* we, Word Embedding */
-                        Collective<t> we = W1.slice((index - INDEX_ORIGINATES_AT_VALUE /*TOKENIZER_PARSER_TOKEN_NUMBER_ORIGINATES_AT_INDEX*/ /*Indices in parser originate at 1 in parser*/)*W1.getShape().getNumberOfColumns(), W1.getShape().getNumberOfColumns());
-                        for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < we.getShape().getN(); j++)
+                    for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < attentionMask.getShape().getDimensionsOfArray()[1]; j++)
+                    {                        
+                        // The batch size (number of tokens) must not exceed the attention mask's length 
+                        if ( !(icp.get_total_number_of_tokens() > attentionMask.getShape().getDimensionsOfArray()[2]) ) 
                         {
-                            is[i*we.getShape().getN() + j] = we[j];
+                            for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < icp.get_total_number_of_tokens() ; k++)
+                            {
+                                /* Get the index of the token in the vocabulary. These indices originate at INDEX_ORIGINATE_AT_VALUE */
+                                cc_tokenizer::string_character_traits<char>::size_type index = iv(icp.get_token_by_number(k + 1), icp.get_current_line_number(), k + 1, redundancy);
+
+                                /* If this condition is false, we are no longer strictly using post-padding; instead, padding tokens may appear */
+                                /* between valid tokens, leading to mixed padding. */
+                                /* TODO: Investigate whether the following statement can ever evaluate to be false, because under that circumstances */
+                                /* mixed padding might occur. */
+                                if (index != INDEX_NOT_FOUND_AT_VALUE)
+                                {
+                                    attentionMask[i*(j*attentionMask.getShape().getDimensionsOfArray()[2]) + k] = DEFAULT_VALID_WORD_VECTOR_MASK_VALUE;
+
+                                    /* we, Word Embedding */
+                                    Collective<t> we = W1.slice((index - INDEX_ORIGINATES_AT_VALUE)*W1.getShape().getNumberOfColumns(), W1.getShape().getNumberOfColumns());
+                                    for (cc_tokenizer::string_character_traits<char>::size_type l = 0; l < we.getShape().getN(); l++)
+                                    {   
+                                        is[k*we.getShape().getN() + l] = we[l];
+                                    }
+                                }
+                                else
+                                {
+                                    /**********************************************************
+                                     * VOCABULARY LOOKUP FAILURE HANDLING
+                                     * 
+                                     * If the token is not found in the vocabulary 
+                                     * (index == INDEX_NOT_FOUND_AT_VALUE), we must halt 
+                                     * processing immediately and raise an exception.
+                                     * 
+                                     * This prevents mixed-padding: If we continue processing 
+                                     * after encountering an unknown token, padding tokens may 
+                                     * be inserted between valid tokens instead of at the end, 
+                                     * violating the post-padding strategy.
+                                     **********************************************************/
+                                    throw ala_exception("Model::buildInputSequence(cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>&, CORPUS&, Collective<t>&, Collective<t>&, Collective<t>&, bool, bool) Error: Encountered a token that is not present in the vocabulary. This should never happen if the inputs are within the expected range. Potential cause: Vocabulary is incomplete or incorrectly loaded.");
+                                }                                                       
+                            }
+                        }
+                        else
+                        {
+                            throw ala_exception("Model::buildInputSequence(cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>&, CORPUS&, Collective<t>&, Collective<t>&, Collective<t>&, bool, bool) Error: ");
                         }
                     }
-                    else
-                    {
-                        /* Handling Vocabulary Lookup Failure: */
-                        /* ----------------------------------- */
-                        /* If the token is not found in the vocabulary (`index == INDEX_NOT_FOUND_AT_VALUE`), we must halt processing immediately and raise an exception. */
-                        /* It prevents mixed-padding: If we continue processing after encountering an unknown token, padding tokens may be inserted between valid tokens instead of at the end, violating  the post-padding strategy. */
-                        throw ala_exception("Model::buildInputSequence() Error: Encountered a token that is not present in the vocabulary. This should never happen if the inputs are within the expected range. Potential cause: Vocabulary is incomplete or incorrectly loaded.");
-                    }                
-                }
+                }                
 #ifdef MAKE_THIS_MODEL_VERBOSE                     
 #endif                
             }
             catch (ala_exception& e)
             {
-                throw ala_exception(cc_tokenizer::String<char>("Model::buildInputSequence() -> ") + cc_tokenizer::String<char>(e.what()));   
+                /**********************************************************************
+                 * EXCEPTION PROPAGATION
+                 * 
+                 * Wrap and re-throw exceptions with additional context about the
+                 * calling function to aid in debugging.
+                 **********************************************************************/
+                throw ala_exception(cc_tokenizer::String<char>("Model::buildInputSequence(cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>&, CORPUS&, Collective<t>&, Collective<t>&, Collective<t>&, bool, bool) -> ") + cc_tokenizer::String<char>(e.what()));   
             }
         }
 
@@ -171,11 +198,16 @@ class Model
          * 
          * @param is An input tensor representing the input sequence batch (currently unused in implementation).
          * 
-         * @param mask A mask tensor of shape [1 x mntpl_input] that differentiates real tokens (1) 
+         * @param attentionMask A mask tensor of shape [batch size x number of masks x each mask length] that differentiates real tokens (1) 
          *        from padding tokens (0). Padding tokens should not receive valid position 
          *        encodings because they do not contribute to the model's understanding of 
          *        sequence structure. Padding tokens are added to make all input sequences 
-         *        uniform in length.
+         *        uniform in length. 
+         * ------------------------------------------------------------------------------------------------------------------------*         
+         *        AT THE MOMENT I AM JUST EXPERIEMENTING WITH SHAPES LIKE AS THIS PARAMETER HAS.                                   *
+         *        I WILL NEED THIS SHAPE WHEN I HAVE BIGGER COMPUTE. IN THAT CASE I WILL BE USING A LOT OF DATA TO TRAIN MODELS.   *
+         *        AT THAT TIME I WILL USE BATCH PROCESSING TO TRAIN MODELS.                                                        *
+         *-------------------------------------------------------------------------------------------------------------------------*
          * 
          * @param mntpl_input Maximum number of tokens per line (sequence length). Each input 
          *        sequence is padded to ensure uniform length across variable-length sequences. 
@@ -216,16 +248,22 @@ class Model
             m x p                 
             p * mask   
          */
-        void buildPositionEncoding(Collective<t>& pe, Collective<t>& dt, cc_tokenizer::string_character_traits<char>::size_type dm, Collective<t>& is, Collective<t>& attentionMaskInputSequence /*mask*/, cc_tokenizer::string_character_traits<char>::size_type mntpl_input, Collective<t>& sin_transformed_product, Collective<t>& cos_transformed_product) throw (ala_exception)
+        void buildPositionEncoding(Collective<t>& pe, Collective<t>& dt, cc_tokenizer::string_character_traits<char>::size_type dm, Collective<t>& is, Collective<t>& attentionMask, cc_tokenizer::string_character_traits<char>::size_type mntpl_input, Collective<t>& sin_transformed_product, Collective<t>& cos_transformed_product) throw (ala_exception)
         {
             try
             {
+                // PHASE 1: Generate positional terms using geometric progression
+                // --------------------------------------------------------------
+                // For each position i and dimension j, compute: i / (10000^(2j/dm))
+                // This creates wavelengths forming a geometric progression from 2π to 10000·2π
                 for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < dt.getShape().getDimensionsOfArray().getNumberOfInnerArrays(); i++)
                 {
                     /* Generate position indices: range from POSITIONAL_ENCODING_START_VALUE(inclusive) to input sequence-length(exclusive), sequence-length is the number of tokens in a line. */
                     for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < dm; j++)
                     {                        
-
+                        // Pair dimensions to share frequencies: 
+                        // Even j and j+1 (odd) use the same frequency base
+                        // This creates sine/cosine pairs for robust position representation
                         cc_tokenizer::string_character_traits<char>::size_type dimension_pair = 0;
 
                         // For even j: use j/2, for odd j: use (j-1)/2 
@@ -236,15 +274,22 @@ class Model
                         } 
                         else // Odd 
                         {
-                            dimension_pair = ((j - 1) / 2); //  Integer division. For two consecutive dimensions, we use the same frequency
+                            dimension_pair = ((j - 1) / 2); // Integer division. For two consecutive dimensions, we use the same frequency
                         }
 
+                        // Calculate exponent for geometric progression: (2j/dm) * ln(10000)
+                        // This spaces frequencies logarithmically across dimensions
                         t exponent = (((2*dimension_pair)/(t)dm) * std::log(SCALING_FACTOR_CONSTANT));
-                                                
+                        
+                        // Compute positional term: position / (10000^(2j/dm))
                         dt[i * dt.getShape().getNumberOfColumns() + j] =  (i/std::pow(10, exponent));
                     }              
                 }                
-                 
+                
+                // PHASE 2: Apply sine and cosine transformations
+                // ----------------------------------------------
+                // Transform positional terms using sine (even dimensions) and cosine (odd dimensions)
+                // This provides unique encoding for each (position, dimension) pair
                 for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < dt.getShape().getN(); i++)
                 {
                     sin_transformed_product[i] = std::sin(dt[i]);
@@ -254,26 +299,71 @@ class Model
                 /*std::cout<< "sin_transformed_product, Columns: " << sin_transformed_product.getShape().getNumberOfColumns() << ", Rows: " << sin_transformed_product.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;*/
 #endif                                
                 /* Fill even and odd indices separately */
-                for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < pe.getShape().getN(); i+=2)
+                /*for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < pe.getShape().getN(); i+=2)
                 {                       
-                    pe[i] = sin_transformed_product[i] * attentionMaskInputSequence[i/pe.getShape().getNumberOfColumns()];
+                    //pe[i] = sin_transformed_product[i] * attentionMask[i/pe.getShape().getNumberOfColumns()];
                 }
                 for (cc_tokenizer::string_character_traits<char>::size_type i = 1; i < pe.getShape().getN(); i+=2)
                 {
-                    pe[i] = cos_transformed_product[i] * attentionMaskInputSequence[i/pe.getShape().getNumberOfColumns()];
+                    //pe[i] = cos_transformed_product[i] * attentionMask[i/pe.getShape().getNumberOfColumns()];
+                }*/
+                
+                // PHASE 3: Apply attention mask and assemble final positional encodings
+                // ---------------------------------------------------------------------
+                // Multiply positional encodings by attention mask to zero-out padding positions
+                // This ensures padding tokens don't receive meaningful position information
+                /*
+                 * Validate that attention mask and positional encoding dimensions are compatible
+                 * This ensures we can properly apply the mask to positional encodings
+                 * TODO: Implement more comprehensive dimension validation earlier in the pipeline
+                 */
+                if (attentionMask.getShape().getNumberOfColumns() == pe.getShape().getDimensionsOfArray().getNumberOfInnerArrays())
+                {
+                    for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < attentionMask.getShape().getDimensionsOfArray()[0]; i++)
+                    {
+                        for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < attentionMask.getShape().getDimensionsOfArray()[1]; j++)
+                        {
+                       
+                            //attentionMask[i*attentionMask.getShape().getDimensionsOfArray()[1]*attentionMask.getShape().getDimensionsOfArray()[2] + j*attentionMask.getShape().getDimensionsOfArray()[2]];
+
+                            /* Fill even and odd indices separately */
+
+                            // Apply sine encodings to even dimensions
+                            for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < pe.getShape().getN(); k+=2)
+                            {
+                                pe[k] = sin_transformed_product[k] * attentionMask[i*attentionMask.getShape().getDimensionsOfArray()[1]*attentionMask.getShape().getDimensionsOfArray()[2] + j*attentionMask.getShape().getDimensionsOfArray()[2] + k/pe.getShape().getNumberOfColumns()]; 
+                            }
+
+                            // Apply cosine encodings to odd dimensions 
+                            for (cc_tokenizer::string_character_traits<char>::size_type k = 1; k < pe.getShape().getN(); k+=2)
+                            {
+                                pe[k] = cos_transformed_product[k] * attentionMask[i*attentionMask.getShape().getDimensionsOfArray()[1]*attentionMask.getShape().getDimensionsOfArray()[2] + j*attentionMask.getShape().getDimensionsOfArray()[2] + k/pe.getShape().getNumberOfColumns()]; 
+                            }
+                        }
+                    }
+                }
+                else 
+                {                       
+                    // NO cleanup performed 
+                    throw ala_exception("Model::buildPositionEncoding(Collective<t>&, Collective<t>&, cc_tokenizer::string_character_traits<char>::size_type, Collective<t>&, Collective<t>&, cc_tokenizer::string_character_traits<char>::size_type, Collective<t>&, Collective<t>&) Error: Attention mask and positional encoding dimension mismatch");
                 }
             }
             catch (std::bad_alloc& e)
             {
-                throw ala_exception(cc_tokenizer::String<char>("Model::buildPositionEncoding() Error: ") + cc_tokenizer::String<char>(e.what()));
+                // CRITICAL: Memory allocation failure - system should terminate immediately
+                // NO cleanup performed - this is a fatal error requiring process exit
+                throw ala_exception(cc_tokenizer::String<char>("Model::buildPositionEncoding(Collective<t>&, Collective<t>&, cc_tokenizer::string_character_traits<char>::size_type, Collective<t>&, Collective<t>&, cc_tokenizer::string_character_traits<char>::size_type, Collective<t>&, Collective<t>&) Error: ") + cc_tokenizer::String<char>(e.what()));
             }
             catch (std::length_error& e)
             {
-                throw ala_exception(cc_tokenizer::String<char>("Model::buildPositionEncoding() Error: ") + cc_tokenizer::String<char>(e.what()));
+                // CRITICAL: Length constraint violation - system should terminate immediately
+                // NO cleanup performed - this is a fatal error requiring process exit
+                throw ala_exception(cc_tokenizer::String<char>("Model::buildPositionEncoding(Collective<t>&, Collective<t>&, cc_tokenizer::string_character_traits<char>::size_type, Collective<t>&, Collective<t>&, cc_tokenizer::string_character_traits<char>::size_type, Collective<t>&, Collective<t>&) Error: ") + cc_tokenizer::String<char>(e.what()));
             }            
             catch (ala_exception& e)
             {
-                throw ala_exception(cc_tokenizer::String<char>("Model::buildPositionEncoding() -> ") + cc_tokenizer::String<char>(e.what()));
+                // Propagate existing ala_exception with additional context
+                throw ala_exception(cc_tokenizer::String<char>("Model::buildPositionEncoding(Collective<t>&, Collective<t>&, cc_tokenizer::string_character_traits<char>::size_type, Collective<t>&, Collective<t>&, cc_tokenizer::string_character_traits<char>::size_type, Collective<t>&, Collective<t>&) -> ") + cc_tokenizer::String<char>(e.what()));
             }
         }
 
@@ -780,7 +870,7 @@ class Model
                                     std::cout << "Status of Forward Pass " << (j + 1) << ", input tokens# "<< icp.get_total_number_of_tokens() << ", target tokens# "<< tcp.get_total_number_of_tokens() << std::endl;
                                 }
 
-                                buildInputSequence(icp, iv, is, mask, attentionMaskInputSequence, W1, !ALLOW_REDUNDANCY);                                
+                                buildInputSequence(icp, iv, is, attentionMaskInputSequence, W1, !ALLOW_REDUNDANCY);                                
 #ifdef MAKE_THIS_MODEL_VERBOSE_FOR_INPUT_SEQUENCE                                
                                 std::cout<< "::: DEBUG DATA -: Model::buildInputSequence() :- :::"  << std::endl;
                                 std::cout<< "Number of tokens in this line: " << icp.get_total_number_of_tokens() << std::endl; 
@@ -803,11 +893,11 @@ class Model
                                         std::cout<< std::endl;
                                     }
                                 }
-                                std::cout<< "attentionMask, Columns: " << attentionMask.getShape().getNumberOfColumns() << ", Rows: " << attentionMask.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
-                                for (int k = 0; k < attentionMask.getShape().getN(); k++)
+                                std::cout<< "attentionMask, Columns: " << attentionMaskInputSequence.getShape().getNumberOfColumns() << ", Rows: " << attentionMaskInputSequence.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
+                                for (int k = 0; k < attentionMaskInputSequence.getShape().getN(); k++)
                                 {
-                                    std::cout<< attentionMask[(k/attentionMask.getShape().getNumberOfColumns())*attentionMask.getShape().getNumberOfColumns() + (k%attentionMask.getShape().getNumberOfColumns())] << " ";
-                                    if ((k + 1)%attentionMask.getShape().getNumberOfColumns() == 0)
+                                    std::cout<< attentionMaskInputSequence[(k/attentionMaskInputSequence.getShape().getNumberOfColumns())*attentionMaskInputSequence.getShape().getNumberOfColumns() + (k%attentionMaskInputSequence.getShape().getNumberOfColumns())] << " ";
+                                    if ((k + 1)%attentionMaskInputSequence.getShape().getNumberOfColumns() == 0)
                                     {
                                         std::cout<< std::endl;
                                     }
