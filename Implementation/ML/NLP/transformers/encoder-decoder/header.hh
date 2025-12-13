@@ -26,7 +26,7 @@
 #define DECODER_INPUT_END_OF_SEQUENCE 2 // <EOS> or <END>
 #define DECODER_INPUT_UNKNOWN_VALUE 3 // <UNK>
 
-#define DECODER_INPUT_DIMMENSIONS 3 // Input dimensions, typically 3D tensor: [batch_size, sequence_length, d_model]
+#define DECODER_INPUT_DIMENSIONS 3 // Input dimensions, typically 3D tensor: [batch_size, sequence_length, d_model]
 
 /*
     1. decoder_input (parameter 1):
@@ -150,6 +150,9 @@
 /* ************************************************************************************************************************************* */
 /*                                        EXPLANAION OF decoder_input, decoder_mask ENDS HERE                                            */
 /* ************************************************************************************************************************************* */   
+
+// Is this standard?
+#define ENCODER_INPUT_DIMENSIONS DECODER_INPUT_DIMENSIONS
 
 /* 
     The position of the layer normalization in the encoder layer.

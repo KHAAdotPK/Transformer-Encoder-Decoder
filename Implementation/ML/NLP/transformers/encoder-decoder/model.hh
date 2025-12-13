@@ -665,6 +665,81 @@ class Model
             }                        
         }
 
+        /**
+         * @brief Constructs the encoder input tensor by concatenating positional encodings and input embeddings along the feature dimension.
+         *
+         * This function prepares the input for the transformer encoder by adding positional information to the input sequence embeddings.
+         * For each sequence in the batch, it copies the pre-computed positional encodings (pe) into the beginning of each token's feature vector
+         * in the encoder input (ei), followed by the actual input embeddings (is).
+         *
+         * Assumptions about tensor shapes (using Collective<t> as a custom multi-dimensional array container):
+         * - ei (encoder input):          [batch_size, seq_len, pe_dim + embed_dim]  // Output tensor, pre-allocated
+         * - pe (positional encoding):   [seq_len, pe_dim]                          // Shared across batch
+         * - is (input sequence):        [seq_len, embed_dim]                       // Shared across batch (or per-batch if different)
+         *
+         * The function does not assume pe_dim == embed_dim (though both being equal is standard in transformers), so concatenated dim = 2 * embed_dim.
+         * It performs manual flattened indexing for efficiency and control in this from-scratch implementation.
+         *
+         * The positional encodings are identical for every sequence in the batch (broadcasted), while input embeddings can differ per batch item
+         * (though in the current loop, it is indexed only by sequence position j, not batch i and this works if all batch items share the same input sequence
+         * or if it is already batched; otherwise, is would need a batch dimension).
+         *
+         * @param ei   Reference to the pre-allocated encoder input tensor to be filled [batch_size, seq_len, concat_dim]
+         * @param pe   Positional encoding tensor [seq_len, pe_dim]
+         * @param is   Input embedding tensor [seq_len, embed_dim] (or batched if needed)
+         * @param eid  Unused parameter kept temporarily for documentation purposes (intended future embedding dimension or similar)
+         *
+         * @throws ala_exception if sequence lengths mismatch between ei, pe, and is
+         */
+        void buildEncoderInput(Collective<t>& ei, Collective<t>& pe, Collective<t>& is, cc_tokenizer::string_character_traits<char>::size_type eid = ENCODER_INPUT_DIMENSIONS) throw (ala_exception)
+        {
+            cc_tokenizer::string_character_traits<char>::size_type batch_size = 0, number_of_inputs = 0, size_of_each_input = 0;
+
+            try
+            {            
+                batch_size = ei.getShape().getDimensionsOfArray()[0];
+                number_of_inputs = ei.getShape().getDimensionsOfArray()[1];
+                size_of_each_input = ei.getShape().getDimensionsOfArray()[2];
+
+                if (number_of_inputs != pe.getShape().getDimensionsOfArray().getNumberOfInnerArrays() && number_of_inputs != is.getShape().getDimensionsOfArray().getNumberOfInnerArrays())
+                {                    
+                    throw ala_exception(cc_tokenizer::String<char>("Model::buildEncoderInput(Collective<t>&, Collective<t>&, Collective<t>&, cc_tokenizer::string_character_traits<char>::size_type) Error: Input sequence length mismatch between encoder input, position encoding, and input sequence."));
+                }
+
+                /* *************************************************************************************************************** */
+                /*   Construct encoder input by concatenating position encodings and input sequences for each input in the batch   */
+                /* *************************************************************************************************************** */
+
+                // Fill position encodings first
+                for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < batch_size; i++)
+                {
+                    for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < number_of_inputs; j++)
+                    {
+                        for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < pe.getShape().getNumberOfColumns(); k++)
+                        {
+                            ei[i*(number_of_inputs*size_of_each_input) + j*size_of_each_input + k] = pe[j*pe.getShape().getNumberOfColumns() + k];
+                        }
+                    }
+                }
+
+                // Then fill input sequences after position encodings
+                for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < batch_size; i++)
+                {
+                    for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < number_of_inputs; j++)
+                    {
+                        for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < is.getShape().getNumberOfColumns(); k++)
+                        {
+                            ei[i*(number_of_inputs*size_of_each_input) + j*size_of_each_input + (k + pe.getShape().getNumberOfColumns())] = is[j*is.getShape().getNumberOfColumns() + k];
+                        }
+                    }
+                }
+            }
+            catch (ala_exception& e)
+            {
+                throw ala_exception(cc_tokenizer::String<char>("Model::buildEncoderInput(Collective<t>&, Collective<t>&, Collective<t>&, cc_tokenizer::string_character_traits<char>::size_type) -> ") + cc_tokenizer::String<char>(e.what()));
+            }
+        }
+
         void buildDecoderInputFromTargetSequenceAndTargetMask(Collective<t>& di, Collective<t>& ts, Collective<t>& tsm, Collective<t>& attentionMaskTargetSequence) throw (ala_exception)
         {               
             DIMENSIONSOFARRAY dima = di.getShape().getDimensionsOfArray();
@@ -802,8 +877,8 @@ class Model
                         tsm = Collective<t>{ptr, DIMENSIONS{mntpl_target + 2, mntpl_target + 2, NULL, NULL}};
                         
                         // Decoder related 
-                        ptr = (t*)cc_tokenizer::allocator<cc_tokenizer::string_character_traits<char>::size_type>().allocate(DECODER_INPUT_DIMMENSIONS);
-                        memset(ptr, 0, sizeof(cc_tokenizer::string_character_traits<char>::size_type)*DECODER_INPUT_DIMMENSIONS);
+                        ptr = (t*)cc_tokenizer::allocator<cc_tokenizer::string_character_traits<char>::size_type>().allocate(DECODER_INPUT_DIMENSIONS);
+                        memset(ptr, 0, sizeof(cc_tokenizer::string_character_traits<char>::size_type)*DECODER_INPUT_DIMENSIONS);
                         /*
                             Decoder input shape: [batch_size, shifted_target_sequence_length, d_model + 1]
                          */
@@ -816,7 +891,7 @@ class Model
                          */
                         ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[2] = dm + 1; // d_model + Place to store TOKEN_ID
                         
-                        DIMENSIONSOFARRAY dimensionsOfInput((cc_tokenizer::string_character_traits<char>::size_type*)ptr, DECODER_INPUT_DIMMENSIONS);
+                        DIMENSIONSOFARRAY dimensionsOfInput((cc_tokenizer::string_character_traits<char>::size_type*)ptr, DECODER_INPUT_DIMENSIONS);
                         DIMENSIONS decoderInputShape(dimensionsOfInput);                                            
                         /*std::cout<< "Decoder Input columns: " << decoderInputShape.getNumberOfColumns() << ", Rows: " << decoderInputShape.getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;*/
                         ptr = cc_tokenizer::allocator<t>().allocate(decoderInputShape.getN());
@@ -825,11 +900,11 @@ class Model
                         /* ************************************************************************************** */
                         // Experimental mask..... attentionMaskInputSequence
                         /* ********************************************************************************************************************************* */
-                            ptr = (t*)cc_tokenizer::allocator<cc_tokenizer::string_character_traits<char>::size_type>().allocate(DECODER_INPUT_DIMMENSIONS);
+                            ptr = (t*)cc_tokenizer::allocator<cc_tokenizer::string_character_traits<char>::size_type>().allocate(DECODER_INPUT_DIMENSIONS);
                             ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[0] = 1; // Batch size
                             ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[1] = 1; // Number of masks                             
                             ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[2] = mntpl_input; // Mask length
-                            dimensionsOfInput = DIMENSIONSOFARRAY((cc_tokenizer::string_character_traits<char>::size_type*)ptr, DECODER_INPUT_DIMMENSIONS);
+                            dimensionsOfInput = DIMENSIONSOFARRAY((cc_tokenizer::string_character_traits<char>::size_type*)ptr, DECODER_INPUT_DIMENSIONS);
                             DIMENSIONS attentionMaskShape(dimensionsOfInput);
                             ptr = cc_tokenizer::allocator<t>().allocate(attentionMaskShape.getN());
                             memset(ptr, 0, sizeof(t)*attentionMaskShape.getN());
@@ -839,17 +914,30 @@ class Model
                         /* ************************************************************************************** */
                         // Experimental mask..... attentionMaskTargetSequence 
                         /* ********************************************************************************************************************************* */
-                           ptr = (t*)cc_tokenizer::allocator<cc_tokenizer::string_character_traits<char>::size_type>().allocate(DECODER_INPUT_DIMMENSIONS);
+                           ptr = (t*)cc_tokenizer::allocator<cc_tokenizer::string_character_traits<char>::size_type>().allocate(DECODER_INPUT_DIMENSIONS);
                            ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[0] = 1; // Batch size
                            ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[1] = mntpl_target + 2; // Number of masks                             
                            ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[2] = mntpl_target + 2; // Mask length
-                           dimensionsOfInput = DIMENSIONSOFARRAY((cc_tokenizer::string_character_traits<char>::size_type*)ptr, DECODER_INPUT_DIMMENSIONS);
+                           dimensionsOfInput = DIMENSIONSOFARRAY((cc_tokenizer::string_character_traits<char>::size_type*)ptr, DECODER_INPUT_DIMENSIONS);
                            //DIMENSIONS attentionMaskShape(dimensionsOfInput);
                            attentionMaskShape = DIMENSIONS(dimensionsOfInput);
                            ptr = cc_tokenizer::allocator<t>().allocate(attentionMaskShape.getN());
                            memset(ptr, 0, sizeof(t)*attentionMaskShape.getN());
                            Collective<t> attentionMaskTargetSequence(ptr, attentionMaskShape);
                         /* ********************************************************************************************************************************* */
+
+                        /* */
+                         ptr = (t*)cc_tokenizer::allocator<cc_tokenizer::string_character_traits<char>::size_type>().allocate(ENCODER_INPUT_DIMENSIONS);    
+                         ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[0] = 1; // Batch size
+                         ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[1] = pe.getShape().getDimensionsOfArray().getNumberOfInnerArrays(); // Encoder input number of rows                             
+                         ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[2] = (pe.getShape().getNumberOfColumns() + is.getShape().getNumberOfColumns()); // Encoder input number of columns
+                         dimensionsOfInput = DIMENSIONSOFARRAY((cc_tokenizer::string_character_traits<char>::size_type*)ptr, ENCODER_INPUT_DIMENSIONS);
+                         DIMENSIONS encoderInputShape = DIMENSIONS(dimensionsOfInput);
+                         ptr = cc_tokenizer::allocator<t>().allocate(encoderInputShape.getN());
+                         memset(ptr, 0, sizeof(t)*encoderInputShape.getN());
+                         ei = Collective<t>{ptr, encoderInputShape};
+                         //ptr = cc_tokenizer::allocator<t>().allocate(pe.getShape().getDimensionsOfArray().getNumberOfInnerArrays() * (pe.getShape().getNumberOfColumns() + is.getShape().getNumberOfColumns()));
+                        /* */
                                                                                                                         
                         for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < es; i++)
                         {
@@ -1017,7 +1105,8 @@ class Model
                                     {
                                         std::cout<< std::endl;
                                     }
-                                }                                
+                                }
+                                std::cout<< "Number of Links: " << pe.getShape().getNumberOfLinks() << std::endl;                             
 #endif                          
                                 /* 
                                     Concatenation Instead of Addition
@@ -1033,23 +1122,30 @@ class Model
                                     By concatenating them, you are creating a new, much larger feature vector (d_model=80) that is not standard and...
                                     will force all subsequent layers (like the Multi-Head Attention and Feed-Forward networks) to handle this larger dimension.
                                  */                                
-                                //ei = Numcy::concatenate(pe, is); 
-                                ei = pe + is;
-                                DIMENSIONSOFARRAY ei_new_shape;
-                                ptr = (t*)cc_tokenizer::allocator<cc_tokenizer::string_character_traits<char>::size_type>().allocate(ei.getShape().getNumberOfLinks() + DIMENSIONS_RESHAPE_CONSTANT);                                
-                                ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[0] = 1; // Batch size
-                                ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[1] = ei.getShape().getNumberOfRows();                             
-                                ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[2] = ei.getShape().getNumberOfColumns();
-                                /*std::cout<< "------>>>>>>>> " << ei.getShape().getReferenceCounts()[0] << std::endl;*/
-                                ei_new_shape = DIMENSIONSOFARRAY{(cc_tokenizer::string_character_traits<char>::size_type*)ptr, ei.getShape().getNumberOfLinks() + DIMENSIONS_RESHAPE_CONSTANT, ei.getShape().getReferenceCounts()[0] /*NUMCY_DEFAULT_REFERENCE_COUNT*/};
+                                //ei = Numcy::concatenate(pe, is);
+                                //DIMENSIONSOFARRAY 
+                                
+                                buildEncoderInput(ei, pe, is, ENCODER_INPUT_DIMENSIONS);
 
-                                /*for (int i = 0; i < ei_new_shape.size(); i++)
-                                {
-                                    std::cout<< ei_new_shape[i] << " ";
-                                }
-                                std::cout<< std::endl;*/
+                                //return ;
 
-                                ei.reShape(ei_new_shape);
+                                /*ei = pe + is;*/
+                                
+                                    //DIMENSIONSOFARRAY ei_new_shape;
+                                    //ptr = (t*)cc_tokenizer::allocator<cc_tokenizer::string_character_traits<char>::size_type>().allocate(ei.getShape().getNumberOfLinks() + DIMENSIONS_RESHAPE_CONSTANT);                                
+                                    //((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[0] = 1; // Batch size
+                                    //((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[1] = ei.getShape().getNumberOfRows();                             
+                                    //((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[2] = ei.getShape().getNumberOfColumns();
+                                    /*std::cout<< "------>>>>>>>> " << ei.getShape().getReferenceCounts()[0] << std::endl;*/
+                                    //ei_new_shape = DIMENSIONSOFARRAY{(cc_tokenizer::string_character_traits<char>::size_type*)ptr, ei.getShape().getNumberOfLinks() + DIMENSIONS_RESHAPE_CONSTANT, ei.getShape().getReferenceCounts()[0] /*NUMCY_DEFAULT_REFERENCE_COUNT*/};
+
+                                    /*for (int i = 0; i < ei_new_shape.size(); i++)
+                                    {
+                                        std::cout<< ei_new_shape[i] << " ";
+                                    }
+                                    std::cout<< std::endl;*/
+
+                                    //ei.reShape(ei_new_shape);
 
                                 /*std::cout<< "HELLO -> " << ei.getShape(1).getReferenceCounts()[0] << ", Size = " << ei.getShape().getDimensionsOfArray().size() << std::endl;
 
@@ -1220,6 +1316,10 @@ class Model
                                 for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < di.getShape().getN(); k++)
                                 {
                                     di[k] = 0;
+                                }
+                                for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < ei.getShape().getN(); k++)
+                                {
+                                    ei[k] = 0;
                                 }
                             }
                         }
