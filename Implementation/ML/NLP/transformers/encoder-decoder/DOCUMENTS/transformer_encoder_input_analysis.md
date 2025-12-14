@@ -18,11 +18,22 @@ The following debug output corresponds to the last line of the training corpus/d
 
 ### Model Configuration
 
-- `Input sequence/senetence/batch length`: 2 tokens/words
+- `Input sequence/sentence/batch length`: 2 tokens/words
 - `Word embedding dimension`: 16 
-- `Position encoding dimension`: as same as the word embeddngs dimensions (which is as same as `d_model`, which in our case is 16. In this implementation, the 'd_model' is macro `DEFAULT_DIMENTIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER`). 
-- `Final encoder input dimension`: 16 (each row of "Positional Encoding Matrix" and its repective word/token embedding both gts added together).
+- `Position encoding dimension`: as same as the word embedding dimensions (which is as same as `d_model`, which in our case is 16. In this implementation, the 'd_model' is macro `DEFAULT_DIMENSIONS_OF_THE_TRANSFORMER_MODEL_HYPERPARAMETER`). 
+- `Final encoder input dimension`: 16 (each row of "Positional Encoding Matrix" and its respective word/token embedding both gets added together).
 - `Maximum sequence length`: 3 positions (`pos`) (2 actual tokens/words and one padding token). 
+
+> Note: **Important Note on Embedding Scaling**
+
+Following the original Transformer paper, token embeddings are typically scaled by √d_model before adding positional encodings:
+
+```cpp
+token_embeddings *= sqrt(d_model);  // d_model = 16 → ×4.0
+encoder_input = token_embeddings + positional_encoding;
+```
+
+This balances the magnitude of learned embeddings with fixed sinusoidal PE. If this scaling is applied, raw embedding weights (before scaling) will appear smaller when recovered via subtraction.
 
 **Each section below describes the relevant data, including input sequences, position encodings, and encoder inputs**.
 
@@ -60,17 +71,17 @@ The `verbose_is` output corresponds to the `Model::buildInputSequence()` functio
 The `L2 norm (Euclidean norm)` of a word embedding provides useful insights about the vector representation of a word. Here’s what it tells us about above embedding: 
 1. Magnitude (`Length`) of the Word Vector: 
     - `Length` (Magnitude) refers to the Euclidean distance from the origin (0,0,...,0) <-> (all 16 dimensions set to 0) to the point represented by the vector in 16 dimensional space. The L2 norm is `0.7822`, which means the vector has a moderate magnitude (not too close to 0, nor extremely large).
-    - Interpretation:
+    - In some embedding spaces (like Word2Vec), the `L2 norm` can be interpreted as:
       - If the `norm` were close to `0`, the word might be a stopword (like "the," "and") with little semantic meaning in some models.
       - If the `norm` were very large (e.g., `>1.5`), the word might be rare, highly specific, or strongly polarized in meaning.
     -  Our `norm` (`~0.78`) suggests the word is semantically meaningful but not excessively strong in any particular direction.
 2. Relative Importance in a Model:
-    -  In models like word2vec, the `L2 norm` can indicate:
+    -  In models like word2vec, the `L2 norm` can be interpreted as:
       - Frequency: More frequent words tend to have smaller norms (but not always).
       - Semantic Strength: Words with strong, specific meanings (e.g., "dinosaur," "quantum") often have larger norms than generic ones (e.g., "thing," "place"). 
     - Our word seems to be neither too generic nor too rare.
 3. Normalization Effects:
-    - Some models (e.g., cosine similarity-based retrieval) normalize embeddings to unit length (L2 norm = 1).
+    - Some models (e.g., cosine similarity based retrieval) normalize embeddings to unit length (L2 norm = 1).
     - Our vector is not normalized (since its `norm` is `0.78` ≠ 1).
     - If normalized, its `direction` (not `magnitude`) would matter more in `similarity comparisons`.
 4. Comparison with Other Words:
@@ -102,9 +113,9 @@ Conclusion: Our word embedding has a moderate L2 norm (0.7822), suggesting...
 Interpretation of the `L2 Norm` (`2.249`)...
 This time the `norm` is much larger than the previous one (which was `~0.78`), which signals important properties about the word:
 1. Semantic Strength & Rarity:
-  - High `L2 norms` (`>>1.0`) often indicate:
+  - High `L2 norms` (`>>1.0`) in some embedding spaces (like Word2Vec) often suggest:
     - A rare, specialized, or emotionally charged word (e.g., "quantum," "tsunami," "magnificent").
-    - A proper noun or named entity (e.g., "Beyoncé", "Ntflix").
+    - A proper noun or named entity (e.g., "Beyoncé", "Netflix").
   - Why?
     - In models like word2vec, frequent words get smaller norms, while rare words get larger ones due to how training distributes magnitudes.
   - Dominant Features:
@@ -117,7 +128,7 @@ This time the `norm` is much larger than the previous one (which was `~0.78`), w
       - Solution: Normalize vectors to L2=1 first, then use cosine similarity.
     2. Possible Word Examples:    
       - If positive dominant feature (2.24): Could be a word like "astonishing", "genius", or "Elon Musk".
-      - If negative: Maybe "catastrophe"m "horrific".
+      - If negative: Maybe "catastrophe" or "horrific".
       - If named entity: Likely a person/place (e.g., "Tokyo", "Einstein").
 Conclusion: This word is semantically strong and probably rare or specialized, with one dominant feature driving its high norm. To identify it exactly, you’d need to:
   - Compare it to known embeddings (e.g., find nearest neighbors).
@@ -165,15 +176,15 @@ Concluson:
 
 ## 3. Encoder Input Building (`verbose_ei`)
 
-### Matrix Concatenation
-The `verbose_ei` output corresponds to the encoder input, which combines the `input sequence` and `positional encodings`. The following detail correspondes to the last line of the training corpus. When `training loop` is executing then following statement gets executed...
+### Matrix Addition (Encoder Input Building)
+The `verbose_ei` output corresponds to the encoder input, which combines (addition) the `input sequence` and `positional encodings`. The following detail corresponds to the last line of the training corpus. When `training loop` is executing then following statement gets executed...
 ```C++
 Collective<t> ei;
 //....
 //....
-ei = pe + is;
+ei = is + pe;
 ```
-And as you can see automagically with the power of abstarction, the `encoder input` comes into existance.  
+And as you can see automagically with the power of `C++` abstraction, the `encoder input` comes into existence.  
 
 ### Details
 - **Encoder Input (ei)**:
@@ -202,24 +213,28 @@ PE(pos, i) =
 \end{cases}
 $$
 
-    d_model is 16. Positions are 3.
-    Transformers add sinusoidal PE (Position Encodings) to token embeddings to inject position information. 
-    To arrive at word embeddings: Define the PE function as above, compute angles per dimension, apply sin/cos accordingly, then subtract PE from each input row. This assumes no additional scaling (e.g., some implementations multiply embeddings by square root of d_model before adding PE, if this is the case, then divide the subtracted embeddings by the square root of d_model to recover the pre scaled versions of word embedings).
-
-3. Norms of the Full Input Rows (Embedding + PE):
+  d_model is 16. Positions are 3.
+  Transformers add sinusoidal PE (Position Encodings) to token embeddings to inject position information.    
+  To recover the original word/token embeddings from the encoder input: Define the PE function as above, compute angles per dimension, apply sin/cos accordingly, then subtract PE from each encoder input row `token_embedding(pos) = encoder_input(pos) - PE(pos)`. 
+  > Note: If your implementation scales embeddings by √d_model before adding PE (as in the original transformer paper), divide the result by √d_model to recover the raw learned embedding weights.
+    
+3. Magnitude Analysis After Adding Positional Encoding (Embedding + PE) 
     - Token 1: L2 norm ≈ 2.882.
     - Token 2: L2 norm ≈ 4.144.
     - Padding: L2 norm = 0.
 
-  These norms are reasonable for d_model=16 (PE alone has norm ≈ sqrt(8)≈2.828 since half the dimensions are ~1 and half ~0 in lower positions, pos=0). The larger norm for token 2 (pos=1) comes from its embedding's high value in dim 0.
+  These magnitudes are expected for d_model=16 (PE alone has norm ≈ sqrt(d_model/2)≈sqrt(16/2)≈2.828 since half the dimensions are ~1 and half ~0 in lower positions, pos=0). The larger norm for token 2 (pos=1) comes from its embedding's high value in dim 0.
 
 4. Potential Issues or Insights:
-    - This looks normal for a trained model: Embeddings evolve during training, often with variance in lower dimensions where PE changes most rapidly across positions. The large value (3.08392) in token 2's dim 0 isn't inherently problematic—it could be a learned feature for that token.
+    - This looks normal for a trained model: Embeddings evolve during training, often with variance in lower dimensions where PE changes most rapidly across positions. The large value (3.08392) in token 2's dim 0 isn't inherently problematic, it could be a learned feature for that token.
     - If training is unstable (e.g., exploding gradients, high loss), check:
       - Scaling: Ensure embeddings are multiplied by square root of 16 = 4 following the original transformer paper, to balance with PE.
+        - Token embeddings, especially after scaling by √d_model = 4 (as in the original paper), commonly reach magnitudes of 2–5+ during training.
       - Padding handling: Confirm attention masks zero out padding contributions (e.g., via -inf in attention scores).
       - Initialization: Token embeddings often start small (e.g., N(0, 0.02)); large values at training end suggest learning, but monitor for NaNs.
       - Sequence length: With short sequences (only 2 tokens), ensure batching/masking works.
+
+    - LayerNorm (applied after each sublayer) will later normalize these vectors to unit norm regardless.  
 
 ## Summary
 - The debug output provides a snapshot of the input processing pipeline for a Transformer encoder-decoder model.
