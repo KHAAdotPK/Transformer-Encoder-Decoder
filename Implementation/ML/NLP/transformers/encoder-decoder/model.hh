@@ -693,37 +693,55 @@ class Model
          */
         void buildEncoderInput(Collective<t>& ei, Collective<t>& pe, Collective<t>& is, cc_tokenizer::string_character_traits<char>::size_type eid = ENCODER_INPUT_DIMENSIONS) throw (ala_exception)
         {
-            cc_tokenizer::string_character_traits<char>::size_type batch_size = 0, number_of_inputs = 0, size_of_each_input = 0;
+            cc_tokenizer::string_character_traits<char>::size_type number_of_batches = 0, number_of_inputs = 0, size_of_each_input = 0;
 
             try
             {            
-                batch_size = ei.getShape().getDimensionsOfArray()[0];
-                number_of_inputs = ei.getShape().getDimensionsOfArray()[1];
-                size_of_each_input = ei.getShape().getDimensionsOfArray()[2];
+                number_of_batches = ei.getShape().getDimensionsOfArray()[0]; // batch_size -> (number of rows*columns)
+                number_of_inputs = ei.getShape().getDimensionsOfArray()[1]; // seq_len -> rows
+                size_of_each_input = ei.getShape().getDimensionsOfArray()[2]; // feature_dim -> columns
 
-                if (number_of_inputs != pe.getShape().getDimensionsOfArray().getNumberOfInnerArrays() && number_of_inputs != is.getShape().getDimensionsOfArray().getNumberOfInnerArrays())
+                if (number_of_inputs != pe.getShape().getDimensionsOfArray().getNumberOfInnerArrays() || number_of_inputs != is.getShape().getDimensionsOfArray().getNumberOfInnerArrays())
                 {                    
-                    throw ala_exception(cc_tokenizer::String<char>("Model::buildEncoderInput(Collective<t>&, Collective<t>&, Collective<t>&, cc_tokenizer::string_character_traits<char>::size_type) Error: Input sequence length mismatch between encoder input, position encoding, and input sequence."));
+                    throw ala_exception(cc_tokenizer::String<char>("Model::buildEncoderInput(Collective<t>&, Collective<t>&, Collective<t>&, cc_tokenizer::string_character_traits<char>::size_type) Error: \"seq_len\" mismatch between encoder input, position encoding, and input sequence."));
+                }
+
+                if (size_of_each_input != pe.getShape().getNumberOfColumns() || size_of_each_input != is.getShape().getNumberOfColumns())
+                {                    
+                    throw ala_exception(cc_tokenizer::String<char>("Model::buildEncoderInput(Collective<t>&, Collective<t>&, Collective<t>&, cc_tokenizer::string_character_traits<char>::size_type) Error: \"feature_dim\" mismatch between encoder input, position encoding, and input sequence."));
                 }
 
                 /* *************************************************************************************************************** */
                 /*   Construct encoder input by concatenating position encodings and input sequences for each input in the batch   */
                 /* *************************************************************************************************************** */
 
+                /*
+                    ---------------------------------------------------------------------------------------------
+                    NOTE:              
+                    |  IF EACH BATCH HAS SAME POSITIONAL ENCODING AND INPUT SEQUENCE VALUES, THIS WILL WORK FINE 
+                    ---------------------------------------------------------------------------------------------  
+                    Current implementation fully supports arbitrary batch sizes greater than 1 
+                    - The outer loop runs over batch_size, suppose it is 2, the stride for each batch item is correctly calculated as i * (number_of_inputs * size_of_each_input). 
+                    - This ensures that for each batch item, we correctly offset into the ei tensor to fill in the positional encodings and input sequences (This properly separates each batch item's data in the flattened array).
+                    - The inner loops then fill in the positional encodings and input sequences for each input position j within that batch item (Both filling loops (positional encodings and input embeddings) correctly offset into the)
+                    - So same positional encodings and input sequences are shared/broadcasted across all batch items, but each batch item gets its own separate section in the ei tensor.
+                    - If in future we want different input sequences per batch item, we would need to modify
+                 */
+
                 // Fill position encodings first
-                for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < batch_size; i++)
+                for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < number_of_batches; i++)
                 {
                     for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < number_of_inputs; j++)
                     {
-                        for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < pe.getShape().getNumberOfColumns(); k++)
+                        for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < size_of_each_input; /*pe.getShape().getNumberOfColumns();*/ k++)
                         {
-                            ei[i*(number_of_inputs*size_of_each_input) + j*size_of_each_input + k] = pe[j*pe.getShape().getNumberOfColumns() + k];
+                            ei[i*(number_of_inputs*size_of_each_input) + j*size_of_each_input + k] = is[j*is.getShape().getNumberOfColumns() + k] + pe[j*pe.getShape().getNumberOfColumns() + k];
                         }
                     }
                 }
 
-                // Then fill input sequences after position encodings
-                for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < batch_size; i++)
+                /*// Then fill input sequences after position encodings
+                for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < number_of_batches; i++)
                 {
                     for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < number_of_inputs; j++)
                     {
@@ -732,12 +750,19 @@ class Model
                             ei[i*(number_of_inputs*size_of_each_input) + j*size_of_each_input + (k + pe.getShape().getNumberOfColumns())] = is[j*is.getShape().getNumberOfColumns() + k];
                         }
                     }
-                }
+                }*/
             }
             catch (ala_exception& e)
             {
                 throw ala_exception(cc_tokenizer::String<char>("Model::buildEncoderInput(Collective<t>&, Collective<t>&, Collective<t>&, cc_tokenizer::string_character_traits<char>::size_type) -> ") + cc_tokenizer::String<char>(e.what()));
             }
+
+            /*
+                In transformer training code, the input embeddings/sequences are computed per batch (different sequences for different words in the batch),
+                so "is" would eventually need a batch dimension, and the inner loops would index it with i as well.
+
+                But for now, with batch_size=1 or when broadcasting the same input sequence across the batch (useful for initial testing/debugging), and to know that code is correct and batch ready.
+             */
         }
 
         void buildDecoderInputFromTargetSequenceAndTargetMask(Collective<t>& di, Collective<t>& ts, Collective<t>& tsm, Collective<t>& attentionMaskTargetSequence) throw (ala_exception)
@@ -808,7 +833,7 @@ class Model
             @v, be verbose when true                                                                                                                                                           
          */
         void startTraining(cc_tokenizer::string_character_traits<char>::size_type es, CORPUS& iv, CORPUS& tv, cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>& icp, cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>& tcp, Collective<t>& is, Collective<t>& ts, Collective<t>& tsm, Collective<t>& p, Collective<t>& pe, cc_tokenizer::string_character_traits<char>::size_type dm, Collective<t>& dt, Collective<t>& ei, Collective<t>& di, Collective<t>& W1, BatchType batch = SINGLE_LINE, bool v = false) throw (ala_exception)
-        {            
+        {                                                   
             switch (batch)
             {
                 case SINGLE_LINE:
@@ -930,7 +955,7 @@ class Model
                          ptr = (t*)cc_tokenizer::allocator<cc_tokenizer::string_character_traits<char>::size_type>().allocate(ENCODER_INPUT_DIMENSIONS);    
                          ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[0] = 1; // Batch size
                          ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[1] = pe.getShape().getDimensionsOfArray().getNumberOfInnerArrays(); // Encoder input number of rows                             
-                         ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[2] = (pe.getShape().getNumberOfColumns() + is.getShape().getNumberOfColumns()); // Encoder input number of columns
+                         ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[2] = dm; /*(pe.getShape().getNumberOfColumns() + is.getShape().getNumberOfColumns());*/ // Encoder input number of columns
                          dimensionsOfInput = DIMENSIONSOFARRAY((cc_tokenizer::string_character_traits<char>::size_type*)ptr, ENCODER_INPUT_DIMENSIONS);
                          DIMENSIONS encoderInputShape = DIMENSIONS(dimensionsOfInput);
                          ptr = cc_tokenizer::allocator<t>().allocate(encoderInputShape.getN());
@@ -1160,7 +1185,18 @@ class Model
                                 
 #ifdef MAKE_THIS_MODEL_VERBOSE_FOR_ENCODER_INPUT                                                                
                                 std::cout<< "::: DEBUG DATA -: Encoder Input(ei) :- :::"  << std::endl;
+                                std::cout<< "number_of_batches(batch_size): " << ei.getShape().getDimensionsOfArray()[0] << ", number_of_inputs(seq_len): " << ei.getShape().getDimensionsOfArray()[1] << ", size_of_each_input(feature_dim): " << ei.getShape().getDimensionsOfArray()[2] << std::endl;
                                 std::cout<< "Columns: " << ei.getShape().getNumberOfColumns() << ", Rows: " << ei.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
+                                for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < ei.getShape().getN(); k++)
+                                {
+                                   std::cout<< ei[ (k/(ei.getShape().getDimensionsOfArray()[1]*ei.getShape().getDimensionsOfArray()[2]))*(ei.getShape().getDimensionsOfArray()[1]*ei.getShape().getDimensionsOfArray()[2]) + (k - (k/(ei.getShape().getDimensionsOfArray()[1]*ei.getShape().getDimensionsOfArray()[2]))*(ei.getShape().getDimensionsOfArray()[1]*ei.getShape().getDimensionsOfArray()[2])) ] << " ";
+                                   if ((k + 1)%ei.getShape().getDimensionsOfArray()[2] == 0)
+                                   {
+                                      std::cout<< std::endl;
+                                   }
+                                }
+
+                                /*
                                 for (int k = 0; k < ei.getShape().getN(); k++)
                                 {
                                     std::cout<< ei[(k/ei.getShape().getNumberOfColumns())*ei.getShape().getNumberOfColumns() + (k%ei.getShape().getNumberOfColumns())] << " ";
@@ -1169,6 +1205,7 @@ class Model
                                         std::cout<< std::endl;
                                     }
                                 }
+                                */
 #endif                                
                                 Encoder<t> encoder(ei.getShape().getNumberOfColumns(), DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER);                                 
                                 Collective<t> encoder_output = encoder.forward(ei, mask, attentionMaskInputSequence);                                
