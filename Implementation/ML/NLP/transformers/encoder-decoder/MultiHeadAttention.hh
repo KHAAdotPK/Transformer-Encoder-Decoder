@@ -86,8 +86,7 @@ struct MultiHeadAttention
         {
             throw ala_exception(cc_tokenizer::String<char>("MultiHeadAttention::worker(Collective<&>) -> ") + e.what());
         }
-
-        //
+        
         return context_vector;
     }
 };

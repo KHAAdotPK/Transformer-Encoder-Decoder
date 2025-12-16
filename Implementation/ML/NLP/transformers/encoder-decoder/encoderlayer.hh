@@ -188,7 +188,7 @@ class EncoderLayer
             }
         }
 
-        Collective<t> forward(Collective<t>& ei/*, Collective<t>& mask*/, Collective<t>& attentionMaskInputSequence, ENCODER_LAYER_NORM_POSITION_TYPE norm_position = PreAttentionAndFeedForwardNetwork, bool is_training = true) throw (ala_exception)
+        Collective<t> forward(Collective<t>& ei, Collective<t>& attentionMaskInputSequence, ENCODER_LAYER_NORM_POSITION_TYPE norm_position = PreAttentionAndFeedForwardNetwork, bool is_training = true) throw (ala_exception)
         {   
             /*                
              * Each head needs to get a clean slice of the feature dimension. If the number of heads doesn't divide evenly into the feature size, then without padding or adjustments, some heads would end up with fractional features, which isn't valid.
@@ -226,8 +226,31 @@ class EncoderLayer
 
             Collective<t> attention_head_output, attention_head_outputs;
 
+            Collective<t> x = ei;
+
             try
-            {                   
+            {                      
+                std::cout<< "::: DEBUG DATA -: Encoder Input(ei) :- :::"  << std::endl;
+                std::cout<< "number_of_batches(batch_size): " << x.getShape().getDimensionsOfArray()[0] << ", number_of_inputs(seq_len): " << x.getShape().getDimensionsOfArray()[1] << ", size_of_each_input(feature_dim): " << x.getShape().getDimensionsOfArray()[2] << std::endl;
+                std::cout<< "Columns: " << x.getShape().getNumberOfColumns() << ", Rows: " << x.getShape().getNumberOfRows()/*.getDimensionsOfArray().getNumberOfInnerArrays()*/<< std::endl;
+                for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < ei.getShape().getN(); k++)
+                {
+                    std::cout<< x[ (k/(x.getShape().getDimensionsOfArray()[1]*x.getShape().getDimensionsOfArray()[2]))*(x.getShape().getDimensionsOfArray()[1]*x.getShape().getDimensionsOfArray()[2]) + (k - (k/(x.getShape().getDimensionsOfArray()[1]*x.getShape().getDimensionsOfArray()[2]))*(x.getShape().getDimensionsOfArray()[1]*x.getShape().getDimensionsOfArray()[2])) ] << " ";
+                    if ((k + 1)%x.getShape().getDimensionsOfArray()[2] == 0)
+                    {
+                        std::cout<< std::endl;
+                    }
+                }
+                
+                // Pre-LN for attention
+                if (norm_position == PreAttentionAndFeedForwardNetwork)
+                {                    
+                    x = attention_norm.forward(x);
+                }
+
+                // Shape of ei = [batch_size, seq_len, feature_dim] = [number_of_batches, number_of_inputs, size_of_each_input]
+                // Each batch is divided into input sequence for each attention head... We have already made sure that feature_dim is even divisible by number_of_attention heads
+                
                 // Get the dimensions of the input array 'ei'      
                 dimensionOfArray = ei.getShape().getDimensionsOfArray();
 
@@ -362,7 +385,7 @@ class EncoderLayer
             //return Collective<t>{NULL, DIMENSIONS{0, 0, NULL, NULL}};
 
             // Return the concatenated result from all attention heads
-            return /*ei_concatenated*/ attention_head_outputs;
+            return /*ei_concatenated*/ /*attention_head_outputs*/ /*ei*/ x;
         }
         
         /**

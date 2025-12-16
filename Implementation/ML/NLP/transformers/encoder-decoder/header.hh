@@ -201,7 +201,7 @@ typedef enum { PreAttentionAndFeedForwardNetwork, PostAttentionAndFeedForwardNet
 {\
     try\
     {\
-        for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < instance.getShape().getDimensionsOfArray().getNumberOfInnerArrays(); k++)\
+        for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < instance.getShape().getNumberOfRows()/*getDimensionsOfArray().getNumberOfInnerArrays()*/; k++)\
         {\
             if (attentionMaskInputSequence[k] == 0)\
             {\

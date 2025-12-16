@@ -256,7 +256,7 @@ class Model
                 // --------------------------------------------------------------
                 // For each position i and dimension j, compute: i / (10000^(2j/dm))
                 // This creates wavelengths forming a geometric progression from 2π to 10000·2π
-                for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < dt.getShape().getDimensionsOfArray().getNumberOfInnerArrays(); i++)
+                for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < dt.getShape().getNumberOfRows()/*.getDimensionsOfArray().getNumberOfInnerArrays()*/; i++)
                 {
                     /* Generate position indices: range from POSITIONAL_ENCODING_START_VALUE(inclusive) to input sequence-length(exclusive), sequence-length is the number of tokens in a line. */
                     for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < dm; j++)
@@ -317,7 +317,7 @@ class Model
                  * This ensures we can properly apply the mask to positional encodings
                  * TODO: Implement more comprehensive dimension validation earlier in the pipeline
                  */
-                if (attentionMask.getShape().getNumberOfColumns() == pe.getShape().getDimensionsOfArray().getNumberOfInnerArrays())
+                if (attentionMask.getShape().getNumberOfColumns() == pe.getShape().getNumberOfRows()/*.getDimensionsOfArray().getNumberOfInnerArrays()*/)
                 {
                     for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < attentionMask.getShape().getDimensionsOfArray()[0]; i++)
                     {
@@ -594,7 +594,7 @@ class Model
                 cc_tokenizer::string_character_traits<char>::size_type number_of_masks = dimesionsOfArrayOfAttentionMaskTargetSequence[1];
                 cc_tokenizer::string_character_traits<char>::size_type size_of_each_mask = dimesionsOfArrayOfAttentionMaskTargetSequence[2];
 
-                for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < tsm.getShape().getDimensionsOfArray().getNumberOfInnerArrays(); i++)                
+                for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < tsm.getShape().getNumberOfRows()/*.getDimensionsOfArray().getNumberOfInnerArrays()*/; i++)                
                 {
                     for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j <= i; j++)
                     {
@@ -701,7 +701,7 @@ class Model
                 number_of_inputs = ei.getShape().getDimensionsOfArray()[1]; // seq_len -> rows
                 size_of_each_input = ei.getShape().getDimensionsOfArray()[2]; // feature_dim -> columns
 
-                if (number_of_inputs != pe.getShape().getDimensionsOfArray().getNumberOfInnerArrays() || number_of_inputs != is.getShape().getDimensionsOfArray().getNumberOfInnerArrays())
+                if (number_of_inputs != pe.getShape().getNumberOfRows()/*.getDimensionsOfArray().getNumberOfInnerArrays()*/ || number_of_inputs != is.getShape().getNumberOfRows()/*getDimensionsOfArray().getNumberOfInnerArrays()*/)
                 {                    
                     throw ala_exception(cc_tokenizer::String<char>("Model::buildEncoderInput(Collective<t>&, Collective<t>&, Collective<t>&, cc_tokenizer::string_character_traits<char>::size_type) Error: \"seq_len\" mismatch between encoder input, position encoding, and input sequence."));
                 }
@@ -954,7 +954,7 @@ class Model
                         /* */
                          ptr = (t*)cc_tokenizer::allocator<cc_tokenizer::string_character_traits<char>::size_type>().allocate(ENCODER_INPUT_DIMENSIONS);    
                          ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[0] = 1; // Batch size
-                         ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[1] = pe.getShape().getDimensionsOfArray().getNumberOfInnerArrays(); // Encoder input number of rows                             
+                         ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[1] = pe.getShape().getNumberOfRows()/*getDimensionsOfArray().getNumberOfInnerArrays()*/; // Encoder input number of rows                             
                          ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[2] = dm; /*(pe.getShape().getNumberOfColumns() + is.getShape().getNumberOfColumns());*/ // Encoder input number of columns
                          dimensionsOfInput = DIMENSIONSOFARRAY((cc_tokenizer::string_character_traits<char>::size_type*)ptr, ENCODER_INPUT_DIMENSIONS);
                          DIMENSIONS encoderInputShape = DIMENSIONS(dimensionsOfInput);
@@ -1197,6 +1197,7 @@ class Model
                                 }
 
                                 /*
+                                // This is a working method as well it just ignores the batch_size dimensions
                                 for (int k = 0; k < ei.getShape().getN(); k++)
                                 {
                                     std::cout<< ei[(k/ei.getShape().getNumberOfColumns())*ei.getShape().getNumberOfColumns() + (k%ei.getShape().getNumberOfColumns())] << " ";
