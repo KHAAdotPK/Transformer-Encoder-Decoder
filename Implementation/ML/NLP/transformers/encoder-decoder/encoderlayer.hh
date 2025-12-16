@@ -220,9 +220,11 @@ class EncoderLayer
             // Counter for tracking slice positions
             cc_tokenizer::string_character_traits<char>::size_type i = 0;
 
-            // Projection matrices for Q, K, V (respectively W^Q, W^K, W^V) and "output projection weights" matrix in back propogation it is known as "W^O"
+            // Projection matrices for Q, K, V (respectively W<sup>Q</sup>, W<sup>K</sup>, W<sup>V</sup>) and "output projection weights" matrix in back propogation it is known as "W<sup>O</sup>"
             Collective<t> queryWeights, keyWeights, valueWeights, outputWeights; // In the original paper "output projection weights" has same shape as the other three weight matrices.
                                                                                  // In reality "output projection weights" should have the same shape projection weights for value input because these weights are multiplied with the output of product between attention scores and value weights
+
+            Collective<t> w_q_slice, w_k_slice, w_v_slice;                                                                                 
 
             Collective<t> attention_head_output, attention_head_outputs;
 
@@ -249,7 +251,9 @@ class EncoderLayer
                 }
 
                 // Shape of ei = [batch_size, seq_len, feature_dim] = [number_of_batches, number_of_inputs, size_of_each_input]
-                // Each batch is divided into input sequence for each attention head... We have already made sure that feature_dim is even divisible by number_of_attention heads
+                // Each batch is divided into input sequence for each attention head... We have already made sure that feature_dim is evenly divisible by number_of_attention heads.
+                // Each attention head will get feature_dim/number_of_attention_heads features for each input in the sequence... so
+                // [batch_size, seq_len, feature_dim/number_of_attention_heads] for each attention head
                 
                 // Get the dimensions of the input array 'ei'      
                 dimensionOfArray = ei.getShape().getDimensionsOfArray();
@@ -267,29 +271,31 @@ class EncoderLayer
 
                 /*
                  * Initialize weight matrices if they haven't been initialized yet
-                 * This lazy initialization creates the Q, K, V projection weights on first use
+                 * This lazy initialization creates the W<sup>Q</sup>, W<sup>K</sup>, W<sup>V</sup> projection weights on first use
+                 * Each weight matrix has same shape as the input 'ei' to this encoder layer
                  */
                 if (queryWeights.getShape().getN() == 0 && keyWeights.getShape().getN() == 0 && valueWeights.getShape().getN() == 0 /*&& outputWeights.getShape().getN() == 0*/)
                 {
-                    // Set dimensions for full weight matrices (model_dim x model_dim)
-                    dimensionOfArray[dimensionOfArray.size() - 1] = dimensionsOfTheModel; // d_model in original paper, ei.getShape().getNumberOfColumns();
-                    dimensionOfArray[dimensionOfArray.size() - 2] = dimensionsOfTheModel; // d_model in original paper, ei.getShape().getNumberOfRows();
+                    // Set dimensions for all weight matrices to [batch_size, d_model, d_model]
+                    // dimensionsOFaRRAY[dimensionOfArray.size() - 3] is already set to batch_size
+                    dimensionOfArray[dimensionOfArray.size() - 2] = dimensionsOfTheModel; // d_model in original paper
+                    dimensionOfArray[dimensionOfArray.size() - 1] = dimensionsOfTheModel; // d_model in original paper
                     dimension_qkv_weights = DIMENSIONS(dimensionOfArray);
  
-                    // Initialize Q, K, V weight matrices with random values
-                    queryWeights = Numcy::Random::randn<t>(dimension_qkv_weights);
+                    // Initialize W<sup>Q</sup>, W<sup>K</sup>, W<sup>V</sup> weight matrices with random values, they all will have same shape as ei (shape of input to this layer of encoder)
+                    queryWeights = Numcy::Random::randn<t>(dimension_qkv_weights); 
                     keyWeights = Numcy::Random::randn<t>(dimension_qkv_weights); 
-                    valueWeights = Numcy::Random::randn<t>(dimension_qkv_weights); // Value weights can have fewer or more fetures than input features
+                    valueWeights = Numcy::Random::randn<t>(dimension_qkv_weights); // Value weights can have fewer or more fetures than input features. In original paper, they are same. Here we keep them same for simplicity.
  
                     /*
                      * Output projection weights
-                     * W<sup>O</sup> has shape d_model$×$(d<sub>v</sub>·h)
+                     * W<sup>O</sup> has shape d_model×(d<sub>v</sub>·h), where h is the number of attention heads and d<sub>v</sub> is the dimension of the value vectors. 
                      * Since W<sup>V</sup> shape is no different than the other two projection weights (W<sup>Q</sup>, W<sup>K</sup>), the shape of W<sup>O</sup> will be same as W<sup>V</sup>
                      * We will not work on slices of these weights. This will be used as a right operand in a dot product operation, the other operand is concatenation of output of all (h many) attention heads
                      */
                     outputWeights = Numcy::Random::randn(dimension_qkv_weights);
                     
-                    // Set dimensions for sliced weight matrices (per attention head)
+                    // Set dimensions for sliced weight matrices (per attention head, d_model/h)
                     dimensionOfArray[dimensionOfArray.size() - 1] = dimensionsOfTheModel / numberOfAttentionHeads; // d_q, d_k, d_v. d_q and d_k are interchangeable but d_v can be different.
                                                                                                                    // In the original paper, you would see d_k, d_k where d_q, d_k would have been used.  
                     dimension_qkv_slice = DIMENSIONS(dimensionOfArray);
@@ -305,13 +311,13 @@ class EncoderLayer
                             /*ei_slice = ei.slice(i*dimension_ei_slice.getNumberOfColumns(), dimension_ei_slice, AXIS_ROWS);*/
 
                     // Extract corresponding slices from Q, K, V weight matrices for this attention head
-                    q_slice = queryWeights.slice(i*dimension_qkv_slice.getNumberOfColumns(), dimension_qkv_slice, AXIS_ROWS);
-                    k_slice = keyWeights.slice(i*dimension_qkv_slice.getNumberOfColumns(), dimension_qkv_slice, AXIS_ROWS);
-                    v_slice = valueWeights.slice(i*dimension_qkv_slice.getNumberOfColumns(), dimension_qkv_slice, AXIS_ROWS); 
+                    /*q_slice*/ w_q_slice = queryWeights.slice(i*dimension_qkv_slice.getNumberOfColumns(), dimension_qkv_slice, AXIS_ROWS);
+                    /*k_slice*/ w_k_slice = keyWeights.slice(i*dimension_qkv_slice.getNumberOfColumns(), dimension_qkv_slice, AXIS_ROWS);
+                    /*v_slice*/ w_v_slice = valueWeights.slice(i*dimension_qkv_slice.getNumberOfColumns(), dimension_qkv_slice, AXIS_ROWS); 
                     
                     // AXIS_COLUMN means we are concatenating horizontally (along columns)
                     // -------------------------------------------------------------------
-                    attention_head_output = MultiHeadAttention<t>::worker(ei, ei, ei, q_slice, k_slice, v_slice);
+                    attention_head_output = MultiHeadAttention<t>::worker(ei, ei, ei, /*q_slice*/ w_q_slice, /*k_slice*/ w_k_slice, /*v_slice*/ w_v_slice);
 
                     //std::cout<< "attention_head_ouput OK = " << attention_head_output.getShape().getNumberOfColumns() << ",  = " << attention_head_output.getShape().getNumberOfRows() << std::endl;
 
@@ -342,9 +348,9 @@ class EncoderLayer
                     // ---------------------------------------------------------------
                     // Update the weight matrices with the sliced portions
                     // This distributes different parts of the weight matrices to different attention heads
-                    queryWeights.update(i*dimension_qkv_slice.getNumberOfColumns(), q_slice, AXIS_ROWS);
-                    keyWeights.update(i*dimension_qkv_slice.getNumberOfColumns(), k_slice, AXIS_ROWS);
-                    valueWeights.update(i*dimension_qkv_slice.getNumberOfColumns(), v_slice, AXIS_ROWS);
+                    queryWeights.update(i*dimension_qkv_slice.getNumberOfColumns(), w_q_slice, AXIS_ROWS);
+                    keyWeights.update(i*dimension_qkv_slice.getNumberOfColumns(), w_k_slice, AXIS_ROWS);
+                    valueWeights.update(i*dimension_qkv_slice.getNumberOfColumns(), w_v_slice, AXIS_ROWS);
                                         
                     // Increment slice counter and move to next attention head
                     i = i + 1;
@@ -374,7 +380,7 @@ class EncoderLayer
             }
             catch (ala_exception& e)
             {
-                throw ala_exception(cc_tokenizer::String<char>("EncoderLayer<t>::forward(Collective<t>&, Collective<t>&, ENCODER_LAYER_NORM_POSITION_TYPE, bool) Error: ") + e.what());
+                throw ala_exception(cc_tokenizer::String<char>("EncoderLayer<t>::forward(Collective<t>&, Collective<t>&, ENCODER_LAYER_NORM_POSITION_TYPE, bool) -> ") + e.what());
             }
 
             //std::cout<< "Columns = " << ei.getShape().getNumberOfColumns() << ", Rows = " << ei.getShape().getNumberOfRows() << std::endl;
