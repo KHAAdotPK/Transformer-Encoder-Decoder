@@ -278,9 +278,12 @@ class EncoderLayer
                 {
                     // Set dimensions for all weight matrices to [batch_size, d_model, d_model]
                     // dimensionsOFaRRAY[dimensionOfArray.size() - 3] is already set to batch_size
-                    dimensionOfArray[dimensionOfArray.size() - 2] = dimensionsOfTheModel; // d_model in original paper
-                    dimensionOfArray[dimensionOfArray.size() - 1] = dimensionsOfTheModel; // d_model in original paper
+                    dimensionOfArray[dimensionOfArray.size() - 2] =   ei.getShape().getDimensionsOfArray()[ei.getShape().getDimensionsOfArray().size() - 2] /*dimensionsOfTheModel*/; // d_model in original paper; nimber of rows
+                    dimensionOfArray[dimensionOfArray.size() - 1] =   ei.getShape().getDimensionsOfArray()[ei.getShape().getDimensionsOfArray().size() - 1] /*dimensionsOfTheModel*/; // d_model in original paper; number of columns
                     dimension_qkv_weights = DIMENSIONS(dimensionOfArray);
+
+
+                        /*std::cout<< dimension_qkv_weights.getNumberOfRows() << ", " << dimension_qkv_weights.getNumberOfColumns() << std::endl;*/
  
                     // Initialize W<sup>Q</sup>, W<sup>K</sup>, W<sup>V</sup> weight matrices with random values, they all will have same shape as ei (shape of input to this layer of encoder)
                     queryWeights = Numcy::Random::randn<t>(dimension_qkv_weights); 
@@ -295,7 +298,7 @@ class EncoderLayer
                      */
                     outputWeights = Numcy::Random::randn(dimension_qkv_weights);
                     
-                    // Set dimensions for sliced weight matrices (per attention head, d_model/h)
+                    // Set dimensions for sliced weight matrices (per attention head, d_model/h), settng number of columns to d_model/number_of_attention_heads
                     dimensionOfArray[dimensionOfArray.size() - 1] = dimensionsOfTheModel / numberOfAttentionHeads; // d_q, d_k, d_v. d_q and d_k are interchangeable but d_v can be different.
                                                                                                                    // In the original paper, you would see d_k, d_k where d_q, d_k would have been used.  
                     dimension_qkv_slice = DIMENSIONS(dimensionOfArray);
@@ -315,10 +318,20 @@ class EncoderLayer
                     /*k_slice*/ w_k_slice = keyWeights.slice(i*dimension_qkv_slice.getNumberOfColumns(), dimension_qkv_slice, AXIS_ROWS);
                     /*v_slice*/ w_v_slice = valueWeights.slice(i*dimension_qkv_slice.getNumberOfColumns(), dimension_qkv_slice, AXIS_ROWS); 
                     
+
+                        /*std::cout<< w_q_slice.getShape().getNumberOfRows() << ", " << w_q_slice.getShape().getNumberOfColumns() << std::endl;*/
+
+                    //std::cout<< "-->>>>> "  << dimension_qkv_slice.getNumberOfColumns() << ", " << dimension_qkv_slice.getNumberOfRows() << "dims = " << numberOfAttentionHeads  << std::endl;
+
+
+                    q_slice = ei.slice(i*dimension_qkv_slice.getNumberOfColumns(), dimension_qkv_slice, AXIS_ROWS);
+                    k_slice = ei.slice(i*dimension_qkv_slice.getNumberOfColumns(), dimension_qkv_slice, AXIS_ROWS);
+                    v_slice = ei.slice(i*dimension_qkv_slice.getNumberOfColumns(), dimension_qkv_slice, AXIS_ROWS);
+                                        
                     // AXIS_COLUMN means we are concatenating horizontally (along columns)
                     // -------------------------------------------------------------------
-                    attention_head_output = MultiHeadAttention<t>::worker(ei, ei, ei, /*q_slice*/ w_q_slice, /*k_slice*/ w_k_slice, /*v_slice*/ w_v_slice);
-
+                    attention_head_output = MultiHeadAttention<t>::worker(/*ei*/ q_slice, /*ei*/ k_slice, /*ei*/ v_slice, /*q_slice*/ w_q_slice, /*k_slice*/ w_k_slice, /*v_slice*/ w_v_slice);
+                    
                     //std::cout<< "attention_head_ouput OK = " << attention_head_output.getShape().getNumberOfColumns() << ",  = " << attention_head_output.getShape().getNumberOfRows() << std::endl;
 
                     // AXIS_COLUMN means we are concatenating horizontally (along columns)
