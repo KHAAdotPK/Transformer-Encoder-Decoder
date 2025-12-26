@@ -93,8 +93,8 @@ struct MultiHeadAttention
 
             context_vector.reShape(dimensionsOfArray);
 
-            std::cout<< "context vector = " << context_vector.getShape().getDimensionsOfArray().size() << ", " <<  context_vector.getShape().getNumberOfColumns() << ", " << context_vector.getShape().getNumberOfRows() << std::endl;
-            std::cout<< "---------------------------------------------------------------------------------" << std::endl;
+            /*std::cout<< "context vector = " << context_vector.getShape().getDimensionsOfArray().size() << ", " <<  context_vector.getShape().getNumberOfColumns() << ", " << context_vector.getShape().getNumberOfRows() << std::endl;
+            std::cout<< "---------------------------------------------------------------------------------" << std::endl;*/
         }
         catch (ala_exception& e)
         {

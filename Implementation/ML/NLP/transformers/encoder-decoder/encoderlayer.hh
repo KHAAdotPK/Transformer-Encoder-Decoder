@@ -332,6 +332,8 @@ class EncoderLayer
                     // -------------------------------------------------------------------
                     attention_head_output = MultiHeadAttention<t>::worker(/*ei*/ q_slice, /*ei*/ k_slice, /*ei*/ v_slice, /*q_slice*/ w_q_slice, /*k_slice*/ w_k_slice, /*v_slice*/ w_v_slice);
 
+                    /*std::cout<< "attention_head_output = " << attention_head_output.getShape().getDimensionsOfArray().size() << std::endl;*/
+
                     /*std::cout<< "w_q_slice = " << w_q_slice.getShape().getDimensionsOfArray().size() << ", cols = " << w_q_slice.getShape().getNumberOfColumns() << ", rows = " << w_q_slice.getShape().getNumberOfRows() << std::endl;
                     std::cout<< "q_slice = " << q_slice.getShape().getDimensionsOfArray().size() << ", cols = " << q_slice.getShape().getNumberOfColumns() << ", rows = " << q_slice.getShape().getNumberOfRows() << std::endl;
                     std::cout<< "attention_head_output dima = " << attention_head_output.getShape().getDimensionsOfArray().size() << ", cols = " << attention_head_output.getShape().getNumberOfColumns() << ", rows = " << attention_head_output.getShape().getNumberOfRows() << std::endl;*/
@@ -354,6 +356,8 @@ class EncoderLayer
                      * representations before the final linear projection.
                      */
                     attention_head_outputs = Numcy::concatenate(attention_head_outputs, attention_head_output, AXIS_COLUMN);
+
+                    /*std::cout<< "attention_head_outputs = " << attention_head_outputs.getShape().getDimensionsOfArray().size() << std::endl;*/
 
                     // AXIS_COLUMN means we are concatenating horizontally (along columns)
                     // -------------------------------------------------------------------
