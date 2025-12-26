@@ -11,11 +11,14 @@
 template <typename t = double>
 struct MultiHeadAttention
 {
+    /*
+        All arguments have same shapes
+     */
     static Collective<t> worker(Collective<t>& Q, Collective<t>& K, Collective<t>& V, Collective<t>& w_q_slice, Collective<t>& w_k_slice, Collective<t>& w_v_slice) throw (ala_exception)
     {
-        /*std::cout<< Q.getShape().getNumberOfColumns() << ", " << Q.getShape().getNumberOfRows() << std::endl;*
-        /*std::cout<< w_q_slice.getShape().getNumberOfColumns() << ", " << w_q_slice.getShape().getNumberOfRows() << std::endl;*/
-        
+        /*std::cout<< "Q = " << Q.getShape().getDimensionsOfArray().size() << ", " <<  Q.getShape().getNumberOfColumns() << ", " << Q.getShape().getNumberOfRows() << std::endl;
+        std::cout<< "w_q = " << w_q_slice.getShape().getDimensionsOfArray().size() << ", " << w_q_slice.getShape().getNumberOfColumns() << ", " << w_q_slice.getShape().getNumberOfRows() << std::endl;*/
+                
         Collective<t> Q_projected, K_projected, V_projected; 
      
         Collective<t> attention_scores, attention_weights, context_vector;
@@ -23,6 +26,8 @@ struct MultiHeadAttention
         // The scale factor 1/sqrt(d_k) prevents softmax saturation in the attention mechanism
         // when key dimension d_k is large, ensuring stable gradients during training
         t scaleFactor = 0;
+
+        DIMENSIONSOFARRAY dimensionsOfArray = Q.getShape().getDimensionsOfArray();
 
         try 
         {
@@ -80,7 +85,16 @@ struct MultiHeadAttention
              * Each output position contains context gathered from all relevant input positions.
              * It represents the "context" that each query position attends to
              */
-            context_vector = Numcy::dot(attention_weights, V_projected);
+            context_vector = Numcy::dot(attention_weights, V_projected); 
+            
+            //context_vector.update_shape(dimensionsOfArray);
+
+            //context_vector.getShape().reShape(Q.getShape().getDimensionsOfArray());
+
+            context_vector.reShape(dimensionsOfArray);
+
+            std::cout<< "context vector = " << context_vector.getShape().getDimensionsOfArray().size() << ", " <<  context_vector.getShape().getNumberOfColumns() << ", " << context_vector.getShape().getNumberOfRows() << std::endl;
+            std::cout<< "---------------------------------------------------------------------------------" << std::endl;
         }
         catch (ala_exception& e)
         {

@@ -331,6 +331,10 @@ class EncoderLayer
                     // AXIS_COLUMN means we are concatenating horizontally (along columns)
                     // -------------------------------------------------------------------
                     attention_head_output = MultiHeadAttention<t>::worker(/*ei*/ q_slice, /*ei*/ k_slice, /*ei*/ v_slice, /*q_slice*/ w_q_slice, /*k_slice*/ w_k_slice, /*v_slice*/ w_v_slice);
+
+                    /*std::cout<< "w_q_slice = " << w_q_slice.getShape().getDimensionsOfArray().size() << ", cols = " << w_q_slice.getShape().getNumberOfColumns() << ", rows = " << w_q_slice.getShape().getNumberOfRows() << std::endl;
+                    std::cout<< "q_slice = " << q_slice.getShape().getDimensionsOfArray().size() << ", cols = " << q_slice.getShape().getNumberOfColumns() << ", rows = " << q_slice.getShape().getNumberOfRows() << std::endl;
+                    std::cout<< "attention_head_output dima = " << attention_head_output.getShape().getDimensionsOfArray().size() << ", cols = " << attention_head_output.getShape().getNumberOfColumns() << ", rows = " << attention_head_output.getShape().getNumberOfRows() << std::endl;*/
                     
                     //std::cout<< "attention_head_ouput OK = " << attention_head_output.getShape().getNumberOfColumns() << ",  = " << attention_head_output.getShape().getNumberOfRows() << std::endl;
 
@@ -404,7 +408,7 @@ class EncoderLayer
             //return Collective<t>{NULL, DIMENSIONS{0, 0, NULL, NULL}};
 
             // Return the concatenated result from all attention heads
-            return /*ei_concatenated*/ /*attention_head_outputs*/ /*ei*/ x;
+            return /*ei_concatenated*/ attention_head_outputs /*ei*/ /*x*/;
         }
         
         /**
