@@ -1262,12 +1262,12 @@ class Model
 
 #ifdef MAKE_THIS_MODEL_VERBOSE_FOR_ENCODER_OUTPUT
                                 std::cout<< "::: DEBUG DATA -: Encoder Output(eo) :- :::"  << std::endl;
-                                std::cout<< "Columns: " << eo.getShape().getNumberOfColumns() << ", Rows: " << eo.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
+                                std::cout<< "Columns: " << encoder_output.getShape().getNumberOfColumns() << ", Rows: " << encoder_output.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
                                 /*std::cout<< "Columns: " << mask.getShape().getNumberOfColumns() << ", Rows: " << mask.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;*/
-                                for (int k = 0; k < eo.getShape().getN(); k++)
+                                for (int k = 0; k < encoder_output.getShape().getN(); k++)
                                 {
-                                    std::cout<< eo[(k/eo.getShape().getNumberOfColumns())*eo.getShape().getNumberOfColumns() + (k%eo.getShape().getNumberOfColumns())] << " ";
-                                    if ((k + 1)%eo.getShape().getNumberOfColumns() == 0)
+                                    std::cout<< encoder_output[(k/encoder_output.getShape().getNumberOfColumns())*encoder_output.getShape().getNumberOfColumns() + (k%encoder_output.getShape().getNumberOfColumns())] << " ";
+                                    if ((k + 1)%encoder_output.getShape().getNumberOfColumns() == 0)
                                     {
                                         std::cout<< std::endl;
                                     }

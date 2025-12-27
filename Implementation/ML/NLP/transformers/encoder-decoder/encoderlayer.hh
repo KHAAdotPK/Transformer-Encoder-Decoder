@@ -1,6 +1,8 @@
 /*
     ML/NLP/transformers/encoder-decoder/EncoderLayer.hh
     Q@khaa.pk
+
+    https://claude.ai/chat/be53d4db-8e51-4b72-8e53-de20352dd866
  */
 
 /*
@@ -188,9 +190,15 @@ class EncoderLayer
             }
         }
 
+        /*
+            // Input: [batch, seq_len, d_model]
+            // Mask: [batch, seq_len, d_model]
+         */
         Collective<t> forward(Collective<t>& ei, Collective<t>& attentionMaskInputSequence, ENCODER_LAYER_NORM_POSITION_TYPE norm_position = PreAttentionAndFeedForwardNetwork, bool is_training = true) throw (ala_exception)
         {   
-            /*                
+            /*  
+             * Validate input dimensions
+             * -------------------------
              * Each head needs to get a clean slice of the feature dimension. If the number of heads doesn't divide evenly into the feature size, then without padding or adjustments, some heads would end up with fractional features, which isn't valid.
              * Adding padding or some adjustment/resolution ensures that each head gets equal numbers of features, thus maintaining the integrity of the multi-head attention mechanism.
              * At the moment, an exception is just being thrown if the number of heads does not divide evenly into the feature size
@@ -226,15 +234,21 @@ class EncoderLayer
 
             Collective<t> w_q_slice, w_k_slice, w_v_slice;                                                                                 
 
-            Collective<t> attention_head_output, attention_head_outputs;
+            Collective<t> attention_head_output, attention_head_outputs, attention_output, residual;
 
             Collective<t> x = ei;
 
+            Collective<t> final_output;
+
             try
-            {                      
-                std::cout<< "::: DEBUG DATA -: Encoder Input(ei) :- :::"  << std::endl;
+            {  
+                // ============================================================
+                // STEP 1: MULTI-HEAD SELF-ATTENTION
+                // ============================================================
+
+                /*std::cout<< "::: DEBUG DATA -: Encoder Input(ei) :- :::"  << std::endl;
                 std::cout<< "number_of_batches(batch_size): " << x.getShape().getDimensionsOfArray()[0] << ", number_of_inputs(seq_len): " << x.getShape().getDimensionsOfArray()[1] << ", size_of_each_input(feature_dim): " << x.getShape().getDimensionsOfArray()[2] << std::endl;
-                std::cout<< "Columns: " << x.getShape().getNumberOfColumns() << ", Rows: " << x.getShape().getNumberOfRows()/*.getDimensionsOfArray().getNumberOfInnerArrays()*/<< std::endl;
+                std::cout<< "Columns: " << x.getShape().getNumberOfColumns() << ", Rows: " << x.getShape().getNumberOfRows() << std::endl;
                 for (cc_tokenizer::string_character_traits<char>::size_type k = 0; k < ei.getShape().getN(); k++)
                 {
                     std::cout<< x[ (k/(x.getShape().getDimensionsOfArray()[1]*x.getShape().getDimensionsOfArray()[2]))*(x.getShape().getDimensionsOfArray()[1]*x.getShape().getDimensionsOfArray()[2]) + (k - (k/(x.getShape().getDimensionsOfArray()[1]*x.getShape().getDimensionsOfArray()[2]))*(x.getShape().getDimensionsOfArray()[1]*x.getShape().getDimensionsOfArray()[2])) ] << " ";
@@ -242,13 +256,18 @@ class EncoderLayer
                     {
                         std::cout<< std::endl;
                     }
-                }
+                }*/
                 
                 // Pre-LN for attention
                 if (norm_position == PreAttentionAndFeedForwardNetwork)
                 {                    
                     x = attention_norm.forward(x);
                 }
+
+                /*
+                 *  --- Multi-Head Attention Computation ---
+                 *  Each head gets d_model/num_heads features
+                 */
 
                 // Shape of ei = [batch_size, seq_len, feature_dim] = [number_of_batches, number_of_inputs, size_of_each_input]
                 // Each batch is divided into input sequence for each attention head... We have already made sure that feature_dim is evenly divisible by number_of_attention heads.
@@ -398,6 +417,71 @@ class EncoderLayer
 
                     std::cout<< ei_slice.getShape().getDimensionsOfArray().size() << std::endl;
                 }*/
+
+                // Apply output projection: W^O
+                // This projects concatenated head outputs back to d_model dimension
+                attention_output = Numcy::dot(attention_head_outputs, outputWeights);   
+                
+                // Apply dropout if training
+                if (is_training && dropOutRate > 0)
+                {
+                   // Apply dropout to attention_output
+                   // (You need to implement dropout mechanism)
+                }
+
+                // ============================================================
+                // STEP 2: ADD & NORM (First Residual Connection)
+                // ============================================================
+                if (norm_position == PreAttentionAndFeedForwardNetwork)
+                {
+                    // Pre-LN: Add residual to original input (before normalization)
+                    residual = ei + attention_output;
+                } 
+                else 
+                {
+                    // Post-LN: Add residual, then normalize
+                    residual = ei + attention_output;
+                    residual = attention_norm.forward(residual);
+                }
+
+                // ============================================================
+                // STEP 3: FEED-FORWARD NETWORK
+                // ============================================================
+
+                Collective<t> ffn_input = residual;
+
+                // Pre-LN: Normalize BEFORE FFN
+                if (norm_position == PreAttentionAndFeedForwardNetwork)
+                {
+                    ffn_input = ffn_norm.forward(residual);
+                }
+
+                // Apply feed-forward network
+                Collective<t> ffn_output = ffn.forward(ffn_input);
+    
+                // Apply dropout if training
+                if (is_training && dropOutRate > 0)
+                {
+                    // Apply dropout to ffn_output
+                }
+
+                // ============================================================
+                // STEP 4: ADD & NORM (Second Residual Connection)
+                // ============================================================
+
+                //Collective<t> final_output;
+    
+                if (norm_position == PreAttentionAndFeedForwardNetwork)
+                {
+                    // Pre-LN: Add residual to input of FFN block
+                    final_output = residual + ffn_output;
+                }
+                else
+                {
+                    // Post-LN: Add residual, then normalize
+                    final_output = residual + ffn_output;
+                    final_output = ffn_norm.forward(final_output);
+                }
             }
             catch (ala_exception& e)
             {
@@ -412,7 +496,7 @@ class EncoderLayer
             //return Collective<t>{NULL, DIMENSIONS{0, 0, NULL, NULL}};
 
             // Return the concatenated result from all attention heads
-            return /*ei_concatenated*/ attention_head_outputs /*ei*/ /*x*/;
+            return /*ei_concatenated*/ /*attention_head_outputs*/ /*ei*/ /*x*/ final_output;
         }
         
         /**
