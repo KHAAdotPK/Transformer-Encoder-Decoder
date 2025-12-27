@@ -1,8 +1,6 @@
 /*
     ML/NLP/transformers/encoder-decoder/EncoderLayer.hh
     Q@khaa.pk
-
-    https://claude.ai/chat/be53d4db-8e51-4b72-8e53-de20352dd866
  */
 
 /*
@@ -194,6 +192,29 @@ class EncoderLayer
             // Input: [batch, seq_len, d_model]
             // Mask: [batch, seq_len, d_model]
          */
+        /**
+         * @brief Forward pass through the Transformer Encoder Layer.
+         *
+         * This method processes the input through a multi-head self-attention mechanism followed by
+         * a position-wise feed-forward network, with optional layer normalization applied before or
+         * after each sub-layer depending on the specified normalization position strategy.
+         *
+         * @tparam t                The numeric type used in computations (e.g., float, double).
+         * @param ei                Input tensor (Collective<t>) representing embedded input tokens.
+         * @param mask              Attention mask to prevent attending to certain positions (e.g., padding).
+         * @param norm_position     Specifies whether to apply layer normalization before (Pre-LN) or
+         *                          after (Post-LN) the attention and feed-forward sub-layers.
+         *                          Options are:
+         *                            - PreAttentionAndFeedForwardNetwork (Pre-LN)
+         *                            - PostAttentionAndFeedForwardNetwork (Post-LN)
+         * @param is_training       Indicates whether the model is in training mode.
+         *                          Used to toggle dropout and gradient-related logic.
+         *
+         * @return Collective<t>    Output tensor after applying attention, residual connections,
+         *                          feed-forward network, and normalization.
+         *
+         * @throws ala_exception    If any internal computation fails or input constraints are violated.
+         */ 
         Collective<t> forward(Collective<t>& ei, Collective<t>& attentionMaskInputSequence, ENCODER_LAYER_NORM_POSITION_TYPE norm_position = PreAttentionAndFeedForwardNetwork, bool is_training = true) throw (ala_exception)
         {   
             /*  
@@ -234,11 +255,37 @@ class EncoderLayer
 
             Collective<t> w_q_slice, w_k_slice, w_v_slice;                                                                                 
 
-            Collective<t> attention_head_output, attention_head_outputs, attention_output, residual;
+            Collective<t> attention_head_output, attention_head_outputs, attention_output;
 
             Collective<t> x = ei;
 
-            Collective<t> final_output;
+
+            /*
+                The output of MULTIHEADATTENTION::forward() is typically a transformed representation of the input sequence, where each token's representation has been updated based on attention over all tokens in the sequence. In a Transformer encoder, this output is usually processed further in the following steps:
+
+                What to Do with the Output of MULTIHEADATTENTION::forward()?
+                1. Pass it to the Feed-Forward Network (FFN)
+                   - The multi-head self-attention output is fed into a position-wise feed-forward network (FFN).
+                   - In this implementation it corespondes to passing it to EncoderFeedForwardNetwork::forward():
+                     EncoderFeedForwardNetwork::forward(output);
+
+                2. Apply Layer Normalization
+                   - After adding a residual connection (if applicable), the output is normalized.
+                   - In this implementation it correspondes to EncoderLayerNormalization::forward():
+                     EncoderLayerNormlization::forward(output);
+                
+                3. Add Residual Connection (Optional, but Important in Transformer)
+                   - If this is a standard Transformer encoder implementation, then add a residual connection before applying layer normalization.
+                   output = input + output;  // Residual connection
+                   EncoderLayerNormalization::forward(output);
+                
+                4. Use it as Input for the Next Encoder Layer (If Using Stacked Encoders)
+                   - If Transformer encoder implementation has multiple layers, the output of this layer becomes the input to the next encoder layer.
+                
+                5. Pass to the Decoder (If Implementing an Encoder-Decoder Model)
+                   - If this is part of an encoder-decoder Transformer (e.g., for machine translation), the final encoder output will be used as input to the decoder.   
+             */
+            Collective<t> final_output, residual;
 
             try
             {  
@@ -346,7 +393,58 @@ class EncoderLayer
                     q_slice = ei.slice(i*dimension_qkv_slice.getNumberOfColumns(), dimension_qkv_slice, AXIS_ROWS);
                     k_slice = ei.slice(i*dimension_qkv_slice.getNumberOfColumns(), dimension_qkv_slice, AXIS_ROWS);
                     v_slice = ei.slice(i*dimension_qkv_slice.getNumberOfColumns(), dimension_qkv_slice, AXIS_ROWS);
-                                        
+                                              
+                    /*
+                        Apply attention mechanism with residual connection
+
+                        The forward method of the ENCODERLAYER class call the forward method of the MULTIHEADATTENTION class with the same argument ei(encoder input) passed three times for query, key, and value.
+                        This might seem redundant at first glance, but there's a specific reason for it.
+
+                        While it may seem like a repetition, using the same argument for query, key, and value in the MultiHeadAttention call 
+                        enables self-attention, a fundamental mechanism for Transformers to understand the relationships within a sequence.
+
+                        Read more about in the comment section of MULTIHEADATTENTION::forward()
+                    
+                        ====================== SELF-ATTENTION EXPLANATION ======================
+                        Self-attention is a key component of Transformer models. In this context,
+                        we pass the same input (ei) as the query, key, and value to the attention 
+                        mechanism:
+
+                        output = attention.forward(ei, ei, ei, mask);
+
+                        This is not a mistake—this is how *self*-attention works by design.
+
+                        Why pass the same input for all three?
+                        -------------------------------------
+                        - Query (Q): What we are searching for in the input.
+                        - Key   (K): What we are matching against.
+                        - Value (V): What we use to compute the final output.
+
+                        In self-attention, we want each token (or word) in the input sequence to:
+                        - Look at all other tokens (including itself),
+                        - Compute how much attention it should give to each,
+                        - And then create a new, weighted representation of itself.
+
+                        By using the same input for Q, K, and V, we allow the model to:
+                        - Capture dependencies and relationships between all tokens,
+                        - Learn which other tokens are important for understanding each token's context,
+                        - Dynamically adapt based on sequence position and content.
+
+                        This enables the model to "pay attention" to relevant tokens no matter where 
+                        they appear in the sequence—something especially useful in NLP tasks like 
+                        translation, summarization, or sentiment analysis.
+
+                        Summary:
+                        --------
+                        Self-attention = Attention(query=input, key=input, value=input)
+                        This is what allows the model to understand each token in the *context* of all others.
+
+                        For example:
+                        Input sentence: "The cat sat on the mat"
+                        The representation for "sat" will consider its attention to "cat", "on", and even "mat",
+                        allowing the model to understand its role better in the sentence.
+                        =========================================================================
+                     */                   
                     // AXIS_COLUMN means we are concatenating horizontally (along columns)
                     // -------------------------------------------------------------------
                     attention_head_output = MultiHeadAttention<t>::worker(/*ei*/ q_slice, /*ei*/ k_slice, /*ei*/ v_slice, /*q_slice*/ w_q_slice, /*k_slice*/ w_k_slice, /*v_slice*/ w_v_slice);
@@ -429,6 +527,11 @@ class EncoderLayer
                    // (You need to implement dropout mechanism)
                 }
 
+                /*
+                    The output of the attention mechanism is passed through a layer normalization step.
+                    This helps stabilize the training process and improve convergence.
+                    The layer normalization is applied to the output of the attention mechanism.
+                 */
                 // ============================================================
                 // STEP 2: ADD & NORM (First Residual Connection)
                 // ============================================================
