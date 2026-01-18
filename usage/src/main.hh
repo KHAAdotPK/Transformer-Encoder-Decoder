@@ -11,6 +11,8 @@
 #ifndef TRANSFORMERS_CODER_ENCODER_MODULE_MAIN_HH
 #define TRANSFORMERS_CODER_ENCODER_MODULE_MAIN_HH
 
+#define ENCODER_OUTPUT_FILE_NAME "encoder_output.dat"
+
 /*
     This allows you to conditionally include or exclude code based on whether macro is used as it is or prefixed/preceded by bang.
     However, it's important to note that using a "bang" (!) before a macro name is not a standard practice in C or C++ and may not behave as expected.
@@ -75,7 +77,7 @@
 #define COMMAND "h -h help --help ? /? (Displays help screen)\n\
 v -v version --version /v (Displays version number)\n\
 e epoch --epoch /e (Its a hyperparameter, sets epoch or number of times the training loop would run)\n\
-corpus --corpus (Path to the file which has the training data)\n\
+corpus --corpus vocab --vocab (Path to the file which has the training data)\n\
 dmodel --dmodel (Its a hperparameter, the dimension of the model)\n\
 verbose --verbose (Display of output, verbosly)\n\
 lr --lr (Its a hperparameter, sets learning rate)\n\
@@ -91,16 +93,18 @@ t T -t -T target --target (Path to file which contains target sequences)\n"
 #ifdef SKIP_GRAM_EMBEDDNG_VECTOR_SIZE
 #undef SKIP_GRAM_EMBEDDNG_VECTOR_SIZE
 #endif
-#define SKIP_GRAM_EMBEDDNG_VECTOR_SIZE 16
+#define SKIP_GRAM_EMBEDDNG_VECTOR_SIZE 8 //16
 
 #ifdef SKIP_GRAM_CONTEXT_WINDOW_SIZE
 #undef SKIP_GRAM_CONTEXT_WINDOW_SIZE
 #endif
-#define SKIP_GRAM_CONTEXT_WINDOW_SIZE 6
+#define SKIP_GRAM_CONTEXT_WINDOW_SIZE 1 //6
 
 #ifndef DEFAULT_W1_FILE_NAME
 #undef DEFAULT_W1_FILE_NAME
 #endif
 #define DEFAULT_W1_FILE_NAME "./data/weights/w1p.dat"
+
+#define DEFAULT_PAIRS_FILE_NAME "./data/pairs/pairs.dat"
 
 #endif

@@ -701,10 +701,14 @@ class Model
                 number_of_inputs = ei.getShape().getDimensionsOfArray()[1]; // seq_len -> rows
                 size_of_each_input = ei.getShape().getDimensionsOfArray()[2]; // feature_dim -> columns
 
+                //std::cout<< "number_of_inputs = " << ei.getShape().getDimensionsOfArray()[1] << ", pe.getShape().getNumberOfRows() = " << pe.getShape().getNumberOfRows() << ", is.getShape().getNumberOfRows() = " << is.getShape().getNumberOfRows() << std::endl; 
+
                 if (number_of_inputs != pe.getShape().getNumberOfRows()/*.getDimensionsOfArray().getNumberOfInnerArrays()*/ || number_of_inputs != is.getShape().getNumberOfRows()/*getDimensionsOfArray().getNumberOfInnerArrays()*/)
                 {                    
                     throw ala_exception(cc_tokenizer::String<char>("Model::buildEncoderInput(Collective<t>&, Collective<t>&, Collective<t>&, cc_tokenizer::string_character_traits<char>::size_type) Error: \"seq_len\" mismatch between encoder input, position encoding, and input sequence."));
                 }
+
+                //std::cout<< "ei.getShape().getDimensionsOfArray()[2] = " << ei.getShape().getDimensionsOfArray()[2] << ", pe.getShape().getNumberOfColumns() = " << pe.getShape().getNumberOfColumns() << ", is.getShape().getNumberOfColumns() = " << is.getShape().getNumberOfColumns() << std::endl; 
 
                 if (size_of_each_input != pe.getShape().getNumberOfColumns() || size_of_each_input != is.getShape().getNumberOfColumns())
                 {                    
@@ -832,7 +836,7 @@ class Model
             @batch, batch type 
             @v, be verbose when true                                                                                                                                                           
          */
-        void startTraining(cc_tokenizer::string_character_traits<char>::size_type es, CORPUS& iv, CORPUS& tv, cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>& icp, cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>& tcp, Collective<t>& is, Collective<t>& ts, Collective<t>& tsm, Collective<t>& p, Collective<t>& pe, cc_tokenizer::string_character_traits<char>::size_type dm, Collective<t>& dt, Collective<t>& ei, Collective<t>& di, Collective<t>& W1, BatchType batch = SINGLE_LINE, bool v = false) throw (ala_exception)
+        void startTraining(cc_tokenizer::string_character_traits<char>::size_type es, CORPUS& iv, CORPUS& tv, cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>& icp, cc_tokenizer::csv_parser<cc_tokenizer::String<char>, char>& tcp, Collective<t>& is, Collective<t>& ts, Collective<t>& tsm, Collective<t>& p, Collective<t>& pe, cc_tokenizer::string_character_traits<char>::size_type dm, Collective<t>& dt, Collective<t>& ei, Collective<t>& di, Collective<t>& W1, cc_tokenizer::String<char>& encoder_output_file_name, BatchType batch = SINGLE_LINE, bool v = false) throw (ala_exception)
         {                                                   
             switch (batch)
             {
@@ -846,7 +850,6 @@ class Model
                     cc_tokenizer::string_character_traits<char>::size_type mntpl_input = icp.max_sequence_length();
                     /* Maximum number of tokens per line(number of tokens in the largest line of target text) */
                     cc_tokenizer::string_character_traits<char>::size_type mntpl_target = tcp.max_sequence_length();
-
 
                     t* ptr = NULL;
                     Collective<t> mask;
@@ -954,7 +957,7 @@ class Model
                         /* */
                          ptr = (t*)cc_tokenizer::allocator<cc_tokenizer::string_character_traits<char>::size_type>().allocate(ENCODER_INPUT_DIMENSIONS);    
                          ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[0] = 1; // Batch size
-                         ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[1] = pe.getShape().getNumberOfRows()/*getDimensionsOfArray().getNumberOfInnerArrays()*/; // Encoder input number of rows                             
+                         ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[1] = mntpl_input /* As same as pe.getShape().getNumberOfRows()*/; // Encoder input number of rows                             
                          ((cc_tokenizer::string_character_traits<char>::size_type*)ptr)[2] = dm; /*(pe.getShape().getNumberOfColumns() + is.getShape().getNumberOfColumns());*/ // Encoder input number of columns
                          dimensionsOfInput = DIMENSIONSOFARRAY((cc_tokenizer::string_character_traits<char>::size_type*)ptr, ENCODER_INPUT_DIMENSIONS);
                          DIMENSIONS encoderInputShape = DIMENSIONS(dimensionsOfInput);
@@ -966,6 +969,8 @@ class Model
                                                                                                                         
                         for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < es; i++)
                         {
+                            Collective<t> encoder_output;
+
                             if (v)
                             {                        
                                 std::cout<< "Epoch " << (i + 1) << ", batch size set to a single line and total number of lines in input vocabulary is " << icp.get_total_number_of_lines()<< " and total number of lines in target vocabulary is " << tcp.get_total_number_of_lines() << std::endl;
@@ -1209,7 +1214,7 @@ class Model
                                 */
 #endif                                
                                 Encoder<t> encoder(ei.getShape().getNumberOfColumns(), DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER);                                 
-                                Collective<t> encoder_output = encoder.forward(ei, mask, attentionMaskInputSequence);                                
+                                /*Collective<t>*/ encoder_output = encoder.forward(ei, mask, attentionMaskInputSequence);                                
                                 /*                                    
                                     In the encoder input, rows (or lines) containing all zeros represent sequences with fewer tokens. 
                                     These rows typically arise due to padding when processing variable-length sequences.
@@ -1258,7 +1263,9 @@ class Model
                                         - The following statement explicitly enforces this constraint by applying a masking operation
                                  */
 
-                                ADHOC_IMPLEMENTATION_OF_MASK_QUERY(encoder_output, attentionMaskInputSequence /*mask*/, true);                                
+                                ADHOC_IMPLEMENTATION_OF_MASK_QUERY(encoder_output, attentionMaskInputSequence /*mask*/, true);
+
+                                encoder_output.write(encoder_output_file_name);
 
 #ifdef MAKE_THIS_MODEL_VERBOSE_FOR_ENCODER_OUTPUT
                                 std::cout<< "::: DEBUG DATA -: Encoder Output(eo) :- :::"  << std::endl;
@@ -1360,7 +1367,9 @@ class Model
                                     ei[k] = 0;
                                 }
                             }
-                        }
+
+                            encoder_output.close();
+                        }                                                
                     }
                     catch (std::bad_alloc& e)
                     {
