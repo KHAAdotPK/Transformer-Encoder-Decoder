@@ -832,7 +832,8 @@ class Model
             @dt, division term
             @ei, encoder input
             @di, decoder input
-            @w1, vector of trained word embeddings, used as an input sequence            
+            @w1, vector of trained word embeddings, used as an input sequence 
+            @encoder_output_file_name, file name to store encoder output
             @batch, batch type 
             @v, be verbose when true                                                                                                                                                           
          */

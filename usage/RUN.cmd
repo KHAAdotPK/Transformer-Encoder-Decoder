@@ -30,6 +30,7 @@ set build_verbose_option_for_decoder_input="BuildDecoderInputVerbose=no"
 set build_verbose_option_for_target_encoding_decoder_input="BuildTargetEncodingDecoderInputVerbose=no"
 set temporary_stress_test_backward_in_forward_propogation="TemporaryStressTestBackwardInForwardPropogation=no"
 set verbose_option=
+set help_option=
 set w1_filename_option="./data/weights/w1p.dat"
 set epochs_option=1
 
@@ -37,6 +38,10 @@ set epochs_option=1
 
 if "%1"=="verbose" (
     set verbose_option=verbose
+    shift
+    goto :start_parsing_args
+) else if "%1"=="help" (
+    set help_option=help
     shift
     goto :start_parsing_args
 ) else if "%1"=="e" (
@@ -102,7 +107,7 @@ goto :run
 goto :eof
 
 :run
-@ .\encoder-decoder.exe corpus i ./data/chat/INPUT.txt t ./data/chat/TARGET.txt e %epochs_option% bs_line w1 %w1_filename_option% %verbose_option%
+@ .\encoder-decoder.exe corpus i ./data/chat/INPUT.txt t ./data/chat/TARGET.txt e %epochs_option% bs_line w1 %w1_filename_option% %verbose_option% %help_option%
 
 :eof
 
