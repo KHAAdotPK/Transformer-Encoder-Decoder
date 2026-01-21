@@ -970,6 +970,11 @@ class Model
                                                                                                                         
                         for (cc_tokenizer::string_character_traits<char>::size_type i = 0; i < es; i++)
                         {
+                            icp.reset(LINES);
+                            icp.reset(TOKENS);
+                            tcp.reset(LINES);
+                            tcp.reset(TOKENS);
+
                             Collective<t> encoder_output;
 
                             if (v)
@@ -981,8 +986,8 @@ class Model
 #endif                              
                             for (cc_tokenizer::string_character_traits<char>::size_type j = 0; j < iv.get_number_of_lines(); j++)
                             {
-                                icp.get_line_by_number(j + 1);
-                                tcp.get_line_by_number(j + 1);
+                                /*icp.get_line_by_number(j + 1)*/ icp.go_to_next_line();
+                                /*tcp.get_line_by_number(j + 1)*/ tcp.go_to_next_line();
 
                                 if (v)
                                 {
@@ -1022,7 +1027,10 @@ class Model
                                     }
                                 }
 #endif
-                                buildTragetSequence(tcp, tv, ts/*, di*/, tsm, attentionMaskTargetSequence, mntpl_target, v);                                
+                                /* ----------------------------------------------------------------------------------------------------------------------------------------------------------------- */
+                                /* 1/3 FOR THE MOMENT DURING TRAINING THE PROGRAM EXITS WITH ERROR "Bad Alloc". I AM COMMENTING OFF THE DECODER PART FOR TIME BEING UNTILL I HAVE RESOLVED THE ISSUE */
+                                /* ----------------------------------------------------------------------------------------------------------------------------------------------------------------- */
+                                //-> buildTragetSequence(tcp, tv, ts/*, di*/, tsm, attentionMaskTargetSequence, mntpl_target, v);                                
 #ifdef MAKE_THIS_MODEL_VERBOSE_FOR_TARGET_ENCODING                                
                                 std::cout<< "::: DEBUG DATA -: Model::buildTargetSequence() :- :::"  << std::endl;
                                 std::cout<< "ts(Target Sequence), Columns: " << ts.getShape().getNumberOfColumns() << ", Rows: " << ts.getShape().getDimensionsOfArray().getNumberOfInnerArrays() << std::endl;
@@ -1280,12 +1288,15 @@ class Model
                                         std::cout<< std::endl;
                                     }
                                 }                                
-#endif                          
+#endif                                                          
                                 /*std::cout<< di.getShape().getNumberOfColumns() << std::endl;
                                 std::cout<< encoder_output.getShape().getNumberOfColumns() + 1 << std::endl;
-                                std::cout<< attentionMaskTargetSequence.getShape().getNumberOfColumns() << std::endl;*/                                    
-                                Decoder<t> decoder(di.getShape().getNumberOfColumns() /*encoder_output.getShape().getNumberOfColumns() + 1*/ /*attentionMaskTargetSequence.getShape().getNumberOfColumns()*/, DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER);
-                                buildDecoderInputFromTargetSequenceAndTargetMask(di, ts, tsm, attentionMaskTargetSequence);
+                                std::cout<< attentionMaskTargetSequence.getShape().getNumberOfColumns() << std::endl;*/
+                                /* ----------------------------------------------------------------------------------------------------------------------------------------------------------------- */
+                                /* 2/3 FOR THE MOMENT DURING TRAINING THE PROGRAM EXITS WITH ERROR "Bad Alloc". I AM COMMENTING OFF THE DECODER PART FOR TIME BEING UNTILL I HAVE RESOLVED THE ISSUE */
+                                /* ----------------------------------------------------------------------------------------------------------------------------------------------------------------- */
+                                //-> Decoder<t> decoder(di.getShape().getNumberOfColumns() /*encoder_output.getShape().getNumberOfColumns() + 1*/ /*attentionMaskTargetSequence.getShape().getNumberOfColumns()*/, DEFAULT_NUMBER_OF_LAYERS_FOR_ENCODER_HYPERPARAMETER, DEFAULT_NUMBER_OF_ATTENTION_HEADS_HYPERPARAMETER, DEFAULT_DROP_OUT_RATE_HYPERPARAMETER);
+                                //-> buildDecoderInputFromTargetSequenceAndTargetMask(di, ts, tsm, attentionMaskTargetSequence);
 #ifdef MAKE_THIS_MODEL_VERBOSE_FOR_DECODER_INPUT
                                 std::cout<< "::: DEBUG DATA -: Decoder Input(di) :- :::"  << std::endl; 
                                 std::cout<< "Batch Size = " << di.getShape().getDimensionsOfArray()[0] << ", Shifted Right Sequence Length = " << di.getShape().getDimensionsOfArray()[1] << ", TOKEN_ID + d_model = " << di.getShape().getDimensionsOfArray()[2] << std::endl;
@@ -1308,8 +1319,11 @@ class Model
                                         std::cout<< std::endl;
                                     }
                                 }
-#endif                                                                                                
-                                Collective<t> decoder_output = decoder.forward(di, encoder_output, attentionMaskTargetSequence /*tsm*/, attentionMaskInputSequence /*mask*/);
+#endif                          
+                                /* ----------------------------------------------------------------------------------------------------------------------------------------------------------------- */
+                                /* 3/3 FOR THE MOMENT DURING TRAINING THE PROGRAM EXITS WITH ERROR "Bad Alloc". I AM COMMENTING OFF THE DECODER PART FOR TIME BEING UNTILL I HAVE RESOLVED THE ISSUE */
+                                /* ----------------------------------------------------------------------------------------------------------------------------------------------------------------- */                                                                      
+                                //-> Collective<t> decoder_output = decoder.forward(di, encoder_output, attentionMaskTargetSequence /*tsm*/, attentionMaskInputSequence /*mask*/);
                                 /* *********************************************************************************************************************************************************************************************** */
                                 /* *********************************************************************************************************************************************************************************************** */
                                 /*                                                                      Reinitialize, input sequence and input sequence mask                                                                       */
